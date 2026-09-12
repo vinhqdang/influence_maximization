@@ -1,6 +1,11 @@
-"""Comparative study: MF-BWI-Fair vs. one-shot classical baselines (celf-greedy,
-fair-welfare-greedy) on a fixed synthetic SBM graph, sweeping backfire intensity
-(beta), recovery rate (q), and the fairness knob (alpha_fair) independently.
+"""Comparative study: MF-BWI-Fair vs. three baselines -- two one-shot classical
+baselines (celf-greedy, fair-welfare-greedy) and one sequential classical
+baseline that also acts every round under the same budget (repeated_greedy,
+see im_lab/baselines/repeated_greedy.py) -- on a fixed synthetic SBM graph,
+sweeping backfire intensity (beta), recovery rate (q), and the fairness knob
+(alpha_fair) independently. repeated_greedy isolates whether MF-BWI-Fair's
+advantage comes from its specific machinery or merely from "gets to act every
+round" (see RESULTS.md).
 
 Run with: python experiments/run_comparison.py
 Outputs under experiments/results/: *.csv (raw per-trial rows), *.png (plots).
@@ -30,11 +35,13 @@ ALGO_LABELS = {
     "kkt_greedy": "KKT-greedy (one-shot)",
     "fair_greedy": "Fair-greedy (one-shot)",
     "mf_bwi_fair": "MF-BWI-Fair (sequential)",
+    "repeated_greedy": "Repeated-greedy (sequential, no fairness/uncertainty)",
 }
 ALGO_COLORS = {
     "kkt_greedy": "#d95f02",
     "fair_greedy": "#7570b3",
     "mf_bwi_fair": "#1b9e77",
+    "repeated_greedy": "#e6ab02",
 }
 
 # Fixed (not hash()-based, which is process-randomized) per-sweep offsets so
@@ -81,14 +88,19 @@ def run_beta_or_q_sweep(sweep_name, values, true_beta_of, q_range_of, alpha_fair
 
             traj, rt = C.run_mfbwi_forward(G, true_beta, C.B, alpha_fair, q_range, trial_seed)
             rows.append(metrics_row(sweep_name, v, "mf_bwi_fair", trial, traj, group_of, group_sizes, rt))
+
+            traj, rt = C.run_repeatedgreedy_forward(G, true_beta, C.B, q_range, trial_seed)
+            rows.append(metrics_row(sweep_name, v, "repeated_greedy", trial, traj, group_of, group_sizes, rt))
     return rows
 
 
 def run_alpha_sweep(G, group_of, group_sizes):
-    """alpha_fair only affects MF-BWI-Fair -- the baselines are recomputed only
-    ONCE per trial and their (identical) metrics are replicated across every
-    alpha_fair value, since re-running them would just repeat the same
-    computation under a different label (see common.py docstring)."""
+    """alpha_fair only affects MF-BWI-Fair -- the other three algorithms (the
+    two one-shot baselines AND repeated_greedy, which has no fairness
+    mechanism either) are recomputed only ONCE per trial and their (identical)
+    metrics are replicated across every alpha_fair value, since re-running them
+    would just repeat the same computation under a different label (see
+    common.py docstring)."""
     rows = []
     q_range = (C.ALPHA_SWEEP_Q, C.ALPHA_SWEEP_Q)
     for trial in range(C.N_TRIALS):
@@ -104,8 +116,12 @@ def run_alpha_sweep(G, group_of, group_sizes):
             baseline_traj[algo] = traj
             baseline_rt[algo] = rt
 
+        traj, rt = C.run_repeatedgreedy_forward(G, C.ALPHA_SWEEP_BETA, C.B, q_range, trial_seed)
+        baseline_traj["repeated_greedy"] = traj
+        baseline_rt["repeated_greedy"] = rt
+
         for v in C.ALPHA_VALUES:
-            for algo in ("kkt_greedy", "fair_greedy"):
+            for algo in ("kkt_greedy", "fair_greedy", "repeated_greedy"):
                 rows.append(
                     metrics_row(
                         "alpha", v, algo, trial, baseline_traj[algo], group_of, group_sizes,

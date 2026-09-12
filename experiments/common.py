@@ -23,6 +23,22 @@ Design notes on the experimental setup (see RESULTS.md for the full writeup):
   ONCE per trial (not once per sweep, not once per swept parameter value) and
   reused everywhere -- this is the single biggest runtime saving in the whole
   study (fair_welfare_greedy's naive non-lazy greedy is the slowest step).
+
+- A FOURTH algorithm, repeated_greedy (im_lab.baselines.repeated_greedy), is
+  also included: it acts EVERY round under the same per-round budget B as
+  mf_bwi_fair (so it is NOT a one-shot baseline), using plain classical
+  cost-effective greedy logic with the TRUE p_plus/q/beta handed to it
+  directly (no Bayesian estimation, no mean-field, no fairness floors). It
+  exists to isolate whether mf_bwi_fair's advantage over the one-shot
+  baselines comes from its specific machinery or simply from "gets to act
+  every round" -- see im_lab/baselines/repeated_greedy.py's module docstring
+  for the full design rationale and compute-budget discussion, and
+  RESULTS.md for the four-way comparison this enables. Like mf_bwi_fair (and
+  unlike the one-shot baselines), it must be recomputed at every swept
+  (beta, q) value since its forward dynamics depend on them; like the
+  one-shot baselines (and unlike mf_bwi_fair), it does not use alpha_fair at
+  all, so in the alpha sweep it is computed once per trial and replicated
+  across alpha_fair values exactly like kkt_greedy/fair_greedy.
 """
 
 from __future__ import annotations
@@ -34,6 +50,7 @@ import numpy as np
 from im_lab import graphs
 from im_lab.baselines.fair_greedy import fair_welfare_greedy
 from im_lab.baselines.kkt_greedy import celf_greedy
+from im_lab.baselines.repeated_greedy import run_repeated_greedy
 from im_lab.mf_bwi_fair import run_mf_bwi_fair
 from im_lab.simulator import (
     count_active,
@@ -72,7 +89,7 @@ BETA_VALUES = [0.0, 0.1, 0.2, 0.3, 0.5, 0.7]
 Q_VALUES = [0.0, 0.05, 0.1, 0.2, 0.4]
 ALPHA_VALUES = [0.0, 0.2, 0.4, 0.6, 0.8]
 
-ALGOS = ["kkt_greedy", "fair_greedy", "mf_bwi_fair"]
+ALGOS = ["kkt_greedy", "fair_greedy", "mf_bwi_fair", "repeated_greedy"]
 
 # A single master RNG seeds every random draw made anywhere in this study, so
 # the whole comparison is reproducible end to end from one seed.
@@ -152,5 +169,15 @@ def run_mfbwi_forward(G, true_beta, budget, alpha_fair, q_range, trial_seed, T=T
     result = run_mf_bwi_fair(
         G, true_beta=true_beta, T=T, budget=budget, alpha_fair=alpha_fair, seed=next_seed()
     )
+    runtime = time.perf_counter() - t0
+    return result["trajectory"], runtime
+
+
+def run_repeatedgreedy_forward(G, true_beta, budget, q_range, trial_seed, T=T) -> tuple[list, float]:
+    """Full T-round repeated_greedy run (acts every round, no alpha_fair --
+    see module docstring above and im_lab/baselines/repeated_greedy.py)."""
+    graphs.assign_true_parameters(G, p_plus_range=P_PLUS_RANGE, q_range=q_range, seed=trial_seed)
+    t0 = time.perf_counter()
+    result = run_repeated_greedy(G, true_beta=true_beta, T=T, budget=budget, seed=next_seed())
     runtime = time.perf_counter() - t0
     return result["trajectory"], runtime
