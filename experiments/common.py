@@ -76,9 +76,16 @@ CELF_NUM_SIMS = 40
 FAIR_NUM_SIMS = 20
 
 # --- Sweep defaults ----------------------------------------------------------
+# NOTE: alpha_fair's MEANING changed with the Lagrangian/welfare redesign (see
+# im_lab/fairness.py) -- it used to be a per-group budget-FLOOR fraction in
+# [0,1] (0=no floor, 1=fully proportional floor); it is now the isoelastic
+# (CES) welfare exponent, roughly in (-inf, 1]: 1=utilitarian/size-only
+# weighting, 0=proportional fairness, more negative=more leximin-like. The
+# sweep values and the fixed default below are chosen for the NEW semantics,
+# not reused from the old floor-fraction sweep.
 DEFAULT_BETA = 0.15
 DEFAULT_Q = 0.05  # default used while sweeping beta
-DEFAULT_ALPHA_FAIR = 0.3
+DEFAULT_ALPHA_FAIR = 0.0  # proportional fairness, a neutral default
 
 BETA_SWEEP_Q = 0.05
 Q_SWEEP_BETA = 0.15
@@ -87,7 +94,7 @@ ALPHA_SWEEP_Q = 0.1
 
 BETA_VALUES = [0.0, 0.1, 0.2, 0.3, 0.5, 0.7]
 Q_VALUES = [0.0, 0.05, 0.1, 0.2, 0.4]
-ALPHA_VALUES = [0.0, 0.2, 0.4, 0.6, 0.8]
+ALPHA_VALUES = [1.0, 0.5, 0.0, -2.0, -8.0]  # utilitarian -> increasingly leximin-like
 
 ALGOS = ["kkt_greedy", "fair_greedy", "mf_bwi_fair", "repeated_greedy"]
 
