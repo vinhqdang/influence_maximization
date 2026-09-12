@@ -15,5 +15,6 @@ __all__ = [
     "bayes",
     "simulator",
     "fairness",
+    "lagrangian_index",
     "mf_bwi_fair",
 ]

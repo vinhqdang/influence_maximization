@@ -1,21 +1,27 @@
-"""MF-BWI-Fair: Mean-Field Belief / Whittle-style Index policy under fairness floors.
+"""MF-BWI-Fair: Mean-Field Belief policy with a Lagrangian multi-action index and
+isoelastic-welfare fairness reweighting.
 
 Pipeline per round:
   1. Read current posterior-mean estimates of p_plus, p_minus, q from the Bayesian
      tracker (the algorithm never sees the simulator's hidden true parameters).
   2. Compute mean-field beliefs m_v (an approximate marginal P(active) for every
-     node) via the fixed-point iteration described below.
-  3. Compute a per-node myopic index for its one meaningful action (CONVERT if
-     currently inactive, MAINTAIN if currently active).
-  4. Allocate the round's budget across nodes by descending index, respecting
-     per-group fairness floors first (fairness.allocate_with_fairness).
-  5. After the simulator reports this round's realized transitions, update the
-     Bayesian tracker (conjugate Beta-Bernoulli).
+     node) via the fixed-point iteration described below -- UNCHANGED from the
+     original design.
+  3. Compute each group's current marginal welfare weight w_g from its tracked
+     time-averaged realized reach u_g (im_lab/fairness.group_welfare_weights).
+  4. Build each node's per-round 2-state (inactive=0/active=1) Lagrangian MDP using
+     the mean-field belief vector as the frozen exogenous "field" for its
+     neighbors' states, with reward r_v(s) = w_g * s, and solve the shared-budget
+     Lagrangian relaxation (im_lab/lagrangian_index.py) via bisection on lambda.
+  5. Fill any leftover budget (from the bisection's discreteness) by a greedy
+     tie-break on each node's action-value gap at lambda*.
+  6. Execute actions, observe transitions (unchanged), Bayesian-update (unchanged),
+     and update each group's tracked u_g for next round's w_g computation.
 
---- Mean-field belief fixed point ---
+--- Mean-field belief fixed point (unchanged) ---
 Exact per-node marginals require tracking correlations across the whole active-set
-distribution, which is intractable at scale. We instead use the standard N-intertwined
-/ individual-based mean-field approximation from network epidemic models (e.g. the
+distribution, which is intractable at scale. We use the standard N-intertwined /
+individual-based mean-field approximation from network epidemic models (e.g. the
 SIS mean-field of Van Mieghem et al.): each node's neighbors are replaced by their
 *marginal* activation probabilities m_u, decoupling the joint distribution into a
 product of independent Bernoullis. The steady-state self-consistency equation this
@@ -26,44 +32,46 @@ implies is:
 
 which we solve by fixed-point (Jacobi) iteration from an initialization at the
 node's current observed state, to tolerance 1e-4 or 50 iterations, whichever first.
-This gives each node a smoothed, network-aware estimate of "how likely am I to be
-active going forward" that is less noisy than its single instantaneous 0/1 state.
 
---- Myopic index (NOT a proven Whittle index) ---
-A fully general Whittle index for this non-progressive, non-monotone, fairness- and
-budget-constrained restless-bandit-like problem would require proving indexability
-(that the set of states where each per-node subproblem prefers "act" over "don't
-act" is monotone in a Lagrange multiplier on the budget) -- a substantial separate
-theoretical exercise that is out of scope here. Instead we implement a clearly
-labeled one-step-lookahead / myopic index:
+We separately confirmed (via a full read of Ou et al., AAMAS 2022, "Networked
+Restless Multi-Armed Bandits for Mobile Interventions") that their alternative
+concavity-based method for handling network coupling only applies to a
+fundamentally different coupling type (deterministic action-vector coupling, e.g. a
+commuting matrix) and does NOT apply to our bilinear neighbor-STATE coupling (an
+active neighbor's actual random state affects another node's transition
+probability). So this mean-field fixed point remains the right tool here and is
+kept exactly as before; only what CONSUMES it (the index computation) changes.
 
-  index_CONVERT(v) = (1 - p_natural_activate(v)) * (1 + h(v)) * d(v) / cost(CONVERT)
-  index_MAINTAIN(v) = p_natural_deactivate(v) * (1 + h(v)) * d(v) / cost(MAINTAIN)
+--- Lagrangian multi-action index (replaces the old myopic/out-degree heuristic) ---
+The previous index was an explicitly-labeled "NOT a proven Whittle index" one-step
+myopic heuristic with an ad hoc out-degree tie-breaker. We replace it with the
+Lagrangian-relaxation template of:
 
-where p_natural_activate/deactivate(v) is v's one-step transition probability under
-the CURRENT actual neighbor states (using posterior-mean parameters) if no action is
-taken -- i.e. exactly the immediate-round gain that forcing the action would buy --
-and h(v) = 1 - |2*m_v - 1| in [0,1] is a mean-field "instability weight" that upweights
-nodes whose long-run mean-field belief sits near 0.5 (where the node's fate is still
-genuinely undecided and an action has lasting leverage) relative to nodes whose
-mean-field belief already sits near 0 or 1 (where the node is mean-field-stable and
-a one-round push will just wash out). This folds the fixed-point beliefs into the
-index as a horizon/leverage correction without claiming a proven multi-step-optimal
-index.
+    Killian, Perrault, Tambe, "Beyond 'To Act or Not to Act': Fast Lagrangian
+    Approaches to General Multi-Action Restless Bandits," AAMAS 2021.
 
-d(v) = 1 + out_degree(v) / max(1, max_out_degree) is a cheap structural tie-breaker.
-It matters for exactly one degenerate case: starting from a fully-inactive graph,
-every never-yet-active node with no active in-neighbors has p_natural_activate(v)=0
-and mean-field belief m_v=0 identically (mean field with no active seed anywhere is
-a trivial all-zero fixed point), so gain and h(v) alone cannot distinguish ANY two
-candidate nodes at round 0 -- a fundamental limitation of any strictly "node's own
-trajectory" one-step index, since it deliberately ignores the value a node's
-activation has for its neighbors. Weighting by out-degree is the classical
-"high-degree heuristic" for IM (a standard, much weaker cousin of greedy noted
-already in Kempe-Kleinberg-Tardos 2003): it lets the index prefer structurally
-better-connected nodes without computing a real multi-hop spread estimate, which
-keeps this an O(1)-per-node, one-step-lookahead index rather than smuggling in a
-CELF-style expected-cascade computation.
+which bypasses proving indexability for our 3-action (NONE/CONVERT/MAINTAIN)
+setting (Killian et al. note this is "notoriously difficult" for M > 2 actions and
+do not attempt it either) by instead finding, via bisection, the smallest shared
+Lagrange multiplier lambda whose aggregate expected cost across all nodes is <= the
+round's budget B. See im_lab/lagrangian_index.py for the full derivation and the
+per-arm value-iteration + bisection machinery; this module only wires the network
+model (mean-field beliefs, posterior means, group welfare weights) into it.
+
+--- Fairness (replaces the old per-group budget-floor heuristic) ---
+The previous two-phase "meet each group's floor first" allocator was empirically
+shown, in a prior experiment, to have only a weak effect. We replace it with the
+welfare-OBJECTIVE-FORM reweighting of:
+
+    Rahmattalabi et al., "Fair Influence Maximization: A Welfare Optimization
+    Approach," AAAI 2021 (isoelastic/CES welfare over per-group reach).
+
+See im_lab/fairness.py for the full derivation of the per-group marginal weight
+w_g and the precise (re-documented) meaning of alpha_fair under this new mechanism.
+There are no per-group floors or quotas anywhere in this design: fairness comes
+entirely from reweighting each node's reward by its group's current marginal
+welfare weight, which then competes on equal footing with every other node inside
+the single shared-budget Lagrangian solve.
 """
 
 from __future__ import annotations
@@ -71,9 +79,10 @@ from __future__ import annotations
 import networkx as nx
 import numpy as np
 
+from . import lagrangian_index
 from .actions import Action, ACTION_COST
 from .bayes import BetaBernoulliTracker
-from .fairness import allocate_with_fairness
+from .fairness import group_welfare_weights
 from .graphs import group_of_map, group_sizes as graph_group_sizes
 from .simulator import simulate_step, true_params_from_graph
 
@@ -113,6 +122,40 @@ def mean_field_beliefs(
     return m
 
 
+def field_transition_probs(
+    G: nx.DiGraph,
+    m: dict,
+    p_plus_hat: dict,
+    p_minus_hat: dict,
+    q_hat: dict,
+) -> tuple[dict, dict]:
+    """Per-node (p01, p10) "no-action" transition probabilities with the mean-field
+    belief vector m plugged in as the frozen exogenous field for every neighbor --
+    i.e. exactly the same formulas used inside mean_field_beliefs' fixed-point
+    update, evaluated once at the CONVERGED m, treating m as consistent with the
+    existing mean-field fixed-point framing (rather than the actual, un-smoothed
+    current neighbor states). These are the transition probabilities fed into each
+    node's Lagrangian MDP (im_lab/lagrangian_index.py) for BOTH branches (s=0 and
+    s=1), since the MDP's value function needs the whole one-step kernel, not just
+    the current-state gain.
+
+      p01(v) = 1 - prod_u (1 - p_plus_hat[u,v] * m_u)         (activate, from s=0)
+      p10(v) = 1 - (1-q_hat[v]) * prod_u (1 - p_minus_hat[u,v] * m_u)  (deactivate, from s=1)
+    """
+    p01: dict = {}
+    p10: dict = {}
+    for v in G.nodes():
+        act_prod = 1.0
+        deact_prod = 1.0
+        for u in G.predecessors(v):
+            mu = m[u]
+            act_prod *= 1.0 - p_plus_hat[(u, v)] * mu
+            deact_prod *= 1.0 - p_minus_hat[(u, v)] * mu
+        p01[v] = 1.0 - act_prod
+        p10[v] = 1.0 - (1.0 - q_hat[v]) * deact_prod
+    return p01, p10
+
+
 class MFBWIFair:
     """Stateful policy + Bayesian tracker for the MF-BWI-Fair algorithm."""
 
@@ -125,18 +168,32 @@ class MFBWIFair:
         beta0: float = 1.0,
         mf_tol: float = 1e-4,
         mf_max_iter: int = 50,
+        gamma: float = 0.9,
+        u_floor: float = 1e-3,
+        n_bisect_iters: int = 40,
+        n_vi_sweeps: int = 200,
     ):
         self.G = G
         self.budget = budget
+        # alpha_fair is now the isoelastic (CES) welfare exponent, NOT the old
+        # per-group floor fraction. See im_lab/fairness.py's module docstring for
+        # its full, redocumented meaning: 1 = utilitarian/size-only weighting,
+        # 0 = proportional fairness, more negative = more leximin-like.
         self.alpha_fair = alpha_fair
         self.mf_tol = mf_tol
         self.mf_max_iter = mf_max_iter
+        self.gamma = gamma
+        self.u_floor = u_floor
+        self.n_bisect_iters = n_bisect_iters
+        self.n_vi_sweeps = n_vi_sweeps
 
         self.group_of = group_of_map(G)
         self.group_sizes = graph_group_sizes(G)
         self.n = G.number_of_nodes()
-        self.out_degree = dict(G.out_degree())
-        self.max_out_degree = max(1, max(self.out_degree.values(), default=1))
+        self.nodes = list(G.nodes())
+        self.nodes_by_group: dict = {g: [] for g in self.group_sizes}
+        for v in self.nodes:
+            self.nodes_by_group[self.group_of[v]].append(v)
 
         self.tracker = BetaBernoulliTracker(alpha0=alpha0, beta0=beta0)
         # Seed the tracker so every edge/node has a posterior even before any trial
@@ -148,9 +205,17 @@ class MFBWIFair:
         for v in G.nodes():
             self.tracker._ensure(("q", v))
 
-        # Budget/fairness bookkeeping for the runtime invariant checks.
+        # Per-group time-averaged realized reach fraction u_g, used to compute this
+        # round's welfare weight w_g (fairness.group_welfare_weights). Bootstrapped
+        # from the actual state on the first choose_actions call, then updated after
+        # every round from the realized post-transition state (update_group_reach).
+        self.group_u_avg: dict = {}
+        self.group_round_count: dict = {g: 0 for g in self.group_sizes}
+
+        # Budget/diagnostics bookkeeping for the runtime invariant checks/tests.
         self.budget_usage_log: list = []
         self.group_spend_log: list = []
+        self.lambda_star_log: list = []
 
     def posterior_means(self) -> tuple[dict, dict, dict]:
         p_plus_hat = {(u, v): self.tracker.mean(("p_plus", u, v)) for u, v in self.G.edges()}
@@ -158,62 +223,94 @@ class MFBWIFair:
         q_hat = {v: self.tracker.mean(("q", v)) for v in self.G.nodes()}
         return p_plus_hat, p_minus_hat, q_hat
 
-    def _natural_transition_probs(self, state: dict, p_plus_hat: dict, p_minus_hat: dict, q_hat: dict):
-        """One-step natural (no-action) activate/deactivate probabilities per node,
-        using ACTUAL current neighbor states (not mean-field), since these are known
-        exactly and give the correct immediate-round gain from acting."""
-        p_activate = {}
-        p_deactivate = {}
-        for v in self.G.nodes():
-            preds_active = [u for u in self.G.predecessors(v) if state[u]]
-            if not state[v]:
-                prod = 1.0
-                for u in preds_active:
-                    prod *= 1.0 - p_plus_hat[(u, v)]
-                p_activate[v] = 1.0 - prod
-            else:
-                prod = 1.0
-                for u in preds_active:
-                    prod *= 1.0 - p_minus_hat[(u, v)]
-                p_deactivate[v] = 1.0 - (1.0 - q_hat[v]) * prod
-        return p_activate, p_deactivate
+    def _group_active_fraction(self, state: dict) -> dict:
+        frac = {}
+        for g, nodes in self.nodes_by_group.items():
+            if not nodes:
+                frac[g] = 0.0
+                continue
+            frac[g] = sum(1 for v in nodes if state[v]) / len(nodes)
+        return frac
+
+    def update_group_reach(self, state: dict) -> None:
+        """Update each group's time-averaged realized reach fraction u_g from a
+        realized (actual, not mean-field) state -- called after each round's
+        transition, so next round's welfare weight reflects it."""
+        frac = self._group_active_fraction(state)
+        for g in self.group_sizes:
+            c = self.group_round_count.get(g, 0)
+            avg = self.group_u_avg.get(g, frac[g])
+            self.group_u_avg[g] = (avg * c + frac[g]) / (c + 1)
+            self.group_round_count[g] = c + 1
 
     def choose_actions(self, state: dict, rng: np.random.Generator = None) -> dict:
         p_plus_hat, p_minus_hat, q_hat = self.posterior_means()
         m = mean_field_beliefs(
             self.G, state, p_plus_hat, p_minus_hat, q_hat, self.mf_tol, self.mf_max_iter
         )
-        p_activate, p_deactivate = self._natural_transition_probs(
-            state, p_plus_hat, p_minus_hat, q_hat
+        p01, p10 = field_transition_probs(self.G, m, p_plus_hat, p_minus_hat, q_hat)
+
+        # Bootstrap u_g, on the very first round, from the actual current state
+        # (there is no realized-reach history yet); every later round instead uses
+        # the running average maintained by update_group_reach.
+        if not self.group_u_avg:
+            self.group_u_avg = self._group_active_fraction(state)
+            self.group_round_count = {g: 1 for g in self.group_sizes}
+
+        w = group_welfare_weights(self.group_sizes, self.group_u_avg, self.alpha_fair, self.u_floor)
+
+        s_arr = np.array([1.0 if state[v] else 0.0 for v in self.nodes])
+        p01_arr = np.array([p01[v] for v in self.nodes])
+        p10_arr = np.array([p10[v] for v in self.nodes])
+        w_arr = np.array([w[self.group_of[v]] for v in self.nodes])
+
+        lam_star, action_is_paid, cost_arr, gap_arr, cost_if_paid = lagrangian_index.solve_lambda_bisection(
+            s_arr,
+            p01_arr,
+            p10_arr,
+            w_arr,
+            self.budget,
+            self.gamma,
+            float(ACTION_COST[Action.CONVERT]),
+            float(ACTION_COST[Action.MAINTAIN]),
+            n_bisect_iters=self.n_bisect_iters,
+            n_vi_sweeps=self.n_vi_sweeps,
         )
+        action_is_paid = action_is_paid.copy()
+        total_spend = float(cost_arr.sum())
 
-        candidates = []
-        for v in self.G.nodes():
-            h = 1.0 - abs(2.0 * m[v] - 1.0)
-            d = 1.0 + self.out_degree[v] / self.max_out_degree
-            if not state[v]:
-                gain = 1.0 - p_activate[v]
-                cost = ACTION_COST[Action.CONVERT]
-                index = gain * (1.0 + h) * d / cost
-                candidates.append((v, Action.CONVERT, cost, index))
-            else:
-                gain = p_deactivate[v]
-                cost = ACTION_COST[Action.MAINTAIN]
-                index = gain * (1.0 + h) * d / cost
-                candidates.append((v, Action.MAINTAIN, cost, index))
+        # Tie-break fill (step 6 of the redesign): any leftover budget from the
+        # bisection's discreteness is filled greedily by descending action-value
+        # gap at lambda*, exactly like the "act or don't" tie-breaking Lagrangian
+        # index methods use -- this keeps the hard budget invariant intact without
+        # reintroducing any per-group floor/quota mechanism.
+        leftover = self.budget - total_spend
+        if leftover > 1e-9:
+            not_paid_idx = np.where(~action_is_paid)[0]
+            order = sorted(not_paid_idx.tolist(), key=lambda i: gap_arr[i], reverse=True)
+            for i in order:
+                c = float(cost_if_paid[i])
+                if c <= leftover + 1e-9:
+                    action_is_paid[i] = True
+                    total_spend += c
+                    leftover -= c
 
-        selected, spend_by_group = allocate_with_fairness(
-            candidates, self.group_of, self.group_sizes, self.n, self.budget, self.alpha_fair
-        )
-
-        total_spend = sum(cost for _, cost in selected.values())
         assert total_spend <= self.budget + 1e-9, "MF-BWI-Fair budget invariant violated"
-        self.budget_usage_log.append(total_spend)
-        self.group_spend_log.append(dict(spend_by_group))
 
-        actions = {v: Action.NONE for v in self.G.nodes()}
-        for v, (action, _cost) in selected.items():
-            actions[v] = action
+        actions: dict = {}
+        spend_by_group = {g: 0.0 for g in self.group_sizes}
+        for i, v in enumerate(self.nodes):
+            paid = bool(action_is_paid[i])
+            if s_arr[i] == 0.0:
+                actions[v] = Action.CONVERT if paid else Action.NONE
+            else:
+                actions[v] = Action.MAINTAIN if paid else Action.NONE
+            if paid:
+                spend_by_group[self.group_of[v]] += float(cost_if_paid[i])
+
+        self.budget_usage_log.append(total_spend)
+        self.group_spend_log.append(spend_by_group)
+        self.lambda_star_log.append(float(lam_star))
         return actions
 
     def observe(self, observations: list) -> None:
@@ -225,14 +322,10 @@ class MFBWIFair:
                 key = (obs["param"], obs["u"], obs["v"])
             self.tracker.update(key, obs["success"])
 
-    def floor_satisfied(self, round_idx: int) -> dict:
-        """For diagnostics/tests: per-group bool of whether that round's spend met
-        (or exceeded) its fairness floor."""
-        from .fairness import group_floors
-
-        floors = group_floors(self.group_sizes, self.n, self.budget, self.alpha_fair)
-        spend = self.group_spend_log[round_idx]
-        return {g: spend.get(g, 0.0) >= floors[g] - 1e-9 for g in self.group_sizes}
+    def group_reach_estimates(self) -> dict:
+        """For diagnostics/tests: current per-group time-averaged realized reach
+        fraction u_g (the quantity fairness.group_welfare_weights consumes)."""
+        return dict(self.group_u_avg)
 
 
 def run_mf_bwi_fair(
@@ -243,17 +336,23 @@ def run_mf_bwi_fair(
     alpha_fair: float,
     init_active=(),
     seed=None,
+    **policy_kwargs,
 ) -> dict:
     """Full end-to-end run: policy + simulator + Bayesian updates, T rounds.
 
     true_beta and the graph's own 'p_plus'/'q' attributes (via
     simulator.true_params_from_graph) define the hidden ground truth used by the
     simulator; the policy only ever sees posterior means derived from observations.
+
+    Any extra keyword arguments (gamma, u_floor, n_bisect_iters, n_vi_sweeps,
+    mf_tol, mf_max_iter, alpha0, beta0) are forwarded to MFBWIFair's constructor;
+    existing callers that only pass the original positional/keyword arguments are
+    unaffected.
     """
     rng = np.random.default_rng(seed)
     p_plus_true, q_true = true_params_from_graph(G)
 
-    policy = MFBWIFair(G, budget=budget, alpha_fair=alpha_fair)
+    policy = MFBWIFair(G, budget=budget, alpha_fair=alpha_fair, **policy_kwargs)
     state = {v: (v in set(init_active)) for v in G.nodes()}
 
     trajectory = [state]
@@ -262,6 +361,7 @@ def run_mf_bwi_fair(
         actions = policy.choose_actions(state, rng)
         new_state, observations = simulate_step(G, state, p_plus_true, q_true, true_beta, actions, rng)
         policy.observe(observations)
+        policy.update_group_reach(new_state)
 
         trajectory.append(new_state)
         actions_history.append(actions)
@@ -272,5 +372,6 @@ def run_mf_bwi_fair(
         "actions_history": actions_history,
         "budget_usage_log": policy.budget_usage_log,
         "group_spend_log": policy.group_spend_log,
+        "lambda_star_log": policy.lambda_star_log,
         "policy": policy,
     }

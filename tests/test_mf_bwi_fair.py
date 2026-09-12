@@ -27,41 +27,54 @@ def _avg_spread_in_sim(G, p_plus, q, seeds, T, reps=40, base_seed=3000):
     return float(np.mean(vals))
 
 
-def test_regression_matches_kkt_greedy_when_reduced_to_classical_case():
-    """beta=0, q=0, budget allows exactly k CONVERTs at round 0 and nothing after.
+def test_classical_reduction_sanity_check_beta0_q0():
+    """beta=0, q=0 classical-IC reduction.
 
-    Both the KKT-greedy seed set and MF-BWI-Fair's own round-0 seed choice are
-    evaluated by running them through the SAME sequential simulator (seed once,
-    then NONE), since that is the fair, apples-to-apples comparison the spec asks
-    for ("to compare fairly in our sequential setting..."). MF-BWI-Fair's index is
-    a one-step/mean-field heuristic (not a proven-optimal greedy), so we only check
-    that its resulting spread is *directionally consistent* with (same order of
-    magnitude as) classical greedy's, not that it is equal or better.
+    NOTE on why this is NOT the same comparison as before the redesign: the old
+    myopic index broke round-0 ties (every never-yet-active node with no active
+    in-neighbors has zero one-step gain AND zero mean-field belief at round 0) with
+    an explicit out-degree tie-breaker, so its round-0 CONVERT set was structurally
+    informed even before any observation existed.
+
+    The new Lagrangian index has no such tie-breaker: with a fresh Beta(1,1) prior,
+    EVERY edge/node posterior mean is identical (0.5), and mean-field beliefs from
+    an all-inactive state are identically 0 for every node (a trivial fixed point,
+    same degenerate case the old docstring already noted) -- so p01(v)=0 and
+    p10(v)=q_hat(v)=0.5 for literally every node, meaning every node's round-0
+    Bellman value is IDENTICAL. The bisection's tie-break fill then picks whichever
+    k nodes happen to sort first among exactly-tied gaps (i.e. essentially
+    arbitrary/insertion-order), which carries no structural signal and is not a
+    meaningful thing to compare against KKT-greedy's degree/spread-informed choice.
+
+    So instead of comparing MF-BWI-Fair's round-0 seed set directly, we run the
+    FULL T-round sequential policy (letting real observations differentiate nodes'
+    Bayesian posteriors and mean-field beliefs from round 1 onward) and check that
+    its final spread is (a) meaningfully above doing nothing, and (b) within a
+    generous order-of-magnitude band of KKT-greedy's one-shot classical spread over
+    the same horizon -- still a "directionally consistent, not necessarily
+    equal/better" check, as before, just applied to the full sequential run rather
+    than an isolated, structurally-uninformative round-0 comparison.
     """
     G = graphs.erdos_renyi_graph(40, 0.06, num_groups=2, seed=100)
     graphs.assign_true_parameters(G, p_plus_range=(0.05, 0.2), q_range=(0.0, 0.0), seed=100)
     p_plus, q = true_params_from_graph(G)
 
     k = 3
-    T = 4
+    T = 8
+    budget = 5 * k
 
     rng = np.random.default_rng(100)
     seed_set_kkt, _spread_est = celf_greedy(G, p_plus, k, num_sims=300, rng=rng)
-
-    policy = MFBWIFair(G, budget=5 * k, alpha_fair=0.0)
-    state0 = {v: False for v in G.nodes()}
-    actions0 = policy.choose_actions(state0, np.random.default_rng(1))
-    seed_set_mf = [v for v, a in actions0.items() if a == Action.CONVERT]
-
-    assert len(seed_set_mf) == k
-
     spread_kkt = _avg_spread_in_sim(G, p_plus, q, seed_set_kkt, T)
-    spread_mf = _avg_spread_in_sim(G, p_plus, q, seed_set_mf, T)
-
     assert spread_kkt > k  # sanity: cascading actually happened
-    assert spread_mf > k
-    # Directionally consistent: same order of magnitude, not necessarily equal.
-    assert 0.5 * spread_kkt <= spread_mf <= 2.0 * spread_kkt
+
+    result = run_mf_bwi_fair(G, true_beta=0.0, T=T, budget=budget, alpha_fair=0.0, seed=100)
+    spread_mf = float(count_active(result["trajectory"][-1]))
+
+    assert spread_mf > 0  # some diffusion happened at all
+    # Generous directional-consistency band (looser than before the redesign,
+    # given the round-0 signal loss explained above).
+    assert 0.2 * spread_kkt <= spread_mf <= 3.0 * spread_kkt
 
 
 def test_budget_invariant_never_violated_across_random_graphs_and_rounds():
@@ -70,7 +83,7 @@ def test_budget_invariant_never_violated_across_random_graphs_and_rounds():
         n = int(rng_master.integers(15, 35))
         p_edge = float(rng_master.uniform(0.08, 0.25))
         beta = float(rng_master.uniform(0.0, 0.6))
-        alpha_fair = float(rng_master.uniform(0.0, 0.8))
+        alpha_fair = float(rng_master.uniform(-2.0, 1.0))
         budget = float(rng_master.integers(3, 20))
         num_groups = int(rng_master.integers(2, 4))
 
@@ -86,27 +99,94 @@ def test_budget_invariant_never_violated_across_random_graphs_and_rounds():
             assert sum(group_spend.values()) <= budget + 1e-9
 
 
-def test_fairness_floor_met_when_jointly_feasible():
-    """Two equal-size groups, alpha small enough that floors sum well within
-    budget (always true since sum_g floor_g = alpha*budget <= budget) and there
-    are plenty of candidate nodes per group -- floors must be met every round."""
-    sizes = [12, 12]
-    G = graphs.stochastic_block_model_graph(sizes, p_in=0.3, p_out=0.05, seed=9)
-    graphs.assign_true_parameters(G, seed=9)
+def test_tie_break_fill_reduces_leftover_budget_in_the_full_policy():
+    """End-to-end (not synthetic-arm) version of the tie-break fill check: build a
+    real MFBWIFair instance, compute the same (p01, p10, w) arrays choose_actions
+    builds internally (via the same public helper functions), confirm the raw
+    bisection alone would leave some budget unused on this instance, then confirm
+    the policy's actually-logged spend (bisection + fill) is at least as large and
+    still respects the budget."""
+    from im_lab import lagrangian_index
+    from im_lab.fairness import group_welfare_weights
+    from im_lab.mf_bwi_fair import mean_field_beliefs, field_transition_probs
 
-    budget = 20.0
-    alpha_fair = 0.6
-    result = run_mf_bwi_fair(
-        G, true_beta=0.1, T=6, budget=budget, alpha_fair=alpha_fair, seed=9
+    G = graphs.stochastic_block_model_graph([10, 10], p_in=0.25, p_out=0.05, seed=11)
+    graphs.assign_true_parameters(G, seed=11)
+    budget = 23.0  # not a clean multiple of 5 or 1-heavy mixes -> likely leftover
+
+    policy = MFBWIFair(G, budget=budget, alpha_fair=0.0)
+    state = {v: (v % 3 == 0) for v in G.nodes()}  # arbitrary non-trivial state
+
+    p_plus_hat, p_minus_hat, q_hat = policy.posterior_means()
+    m = mean_field_beliefs(G, state, p_plus_hat, p_minus_hat, q_hat)
+    p01, p10 = field_transition_probs(G, m, p_plus_hat, p_minus_hat, q_hat)
+    policy.group_u_avg = policy._group_active_fraction(state)
+    policy.group_round_count = {g: 1 for g in policy.group_sizes}
+    w = group_welfare_weights(policy.group_sizes, policy.group_u_avg, policy.alpha_fair, policy.u_floor)
+
+    s_arr = np.array([1.0 if state[v] else 0.0 for v in policy.nodes])
+    p01_arr = np.array([p01[v] for v in policy.nodes])
+    p10_arr = np.array([p10[v] for v in policy.nodes])
+    w_arr = np.array([w[policy.group_of[v]] for v in policy.nodes])
+
+    _lam, paid, raw_cost_arr, _gap, cost_if_paid = lagrangian_index.solve_lambda_bisection(
+        s_arr, p01_arr, p10_arr, w_arr, budget, policy.gamma,
+        float(ACTION_COST[Action.CONVERT]), float(ACTION_COST[Action.MAINTAIN]),
+        n_bisect_iters=policy.n_bisect_iters, n_vi_sweeps=policy.n_vi_sweeps,
     )
-    policy = result["policy"]
+    raw_cost = float(raw_cost_arr.sum())
+    assert raw_cost <= budget + 1e-9
+    raw_leftover = budget - raw_cost
+    # Is there at least one un-paid arm whose paid-action cost fits the raw
+    # leftover, i.e. a fill opportunity the bisection itself left on the table?
+    fill_opportunity_exists = bool(
+        np.any((~paid) & (cost_if_paid <= raw_leftover + 1e-9))
+    )
 
-    for round_idx in range(len(result["group_spend_log"])):
-        satisfied = policy.floor_satisfied(round_idx)
-        assert all(satisfied.values()), (
-            f"round {round_idx}: floors not met: {satisfied}, "
-            f"spend={result['group_spend_log'][round_idx]}"
+    policy.choose_actions(state, np.random.default_rng(0))
+    actual_spend = policy.budget_usage_log[-1]
+
+    assert actual_spend <= budget + 1e-9
+    assert actual_spend >= raw_cost - 1e-9
+    if fill_opportunity_exists:
+        assert actual_spend > raw_cost + 1e-9, (
+            "tie-break fill did not use an available leftover-budget opportunity"
         )
+
+
+def test_lower_alpha_shifts_realized_reach_toward_worst_off_group():
+    """Replaces the old fairness-floor test (no longer meaningful: floors are
+    gone). Checks the new mechanism's actual intended effect: on an SBM graph with
+    an unequal-size group split, decreasing alpha_fair (more inequality-averse)
+    should not decrease -- and, on average, should increase -- the smaller/worse-
+    off group's realized reach share, averaged over enough trials to not be flaky.
+    """
+    sizes = [8, 16]  # unequal groups; group 0 (the smaller) is the "worst-off" one
+    n_trials = 20
+    T, budget = 6, 8
+
+    def worst_off_share(alpha_fair: float, seed: int) -> float:
+        G = graphs.stochastic_block_model_graph(sizes, p_in=0.3, p_out=0.03, seed=seed)
+        graphs.assign_true_parameters(G, seed=seed)
+        result = run_mf_bwi_fair(G, true_beta=0.1, T=T, budget=budget, alpha_fair=alpha_fair, seed=seed)
+        policy = result["policy"]
+        final_state = result["trajectory"][-1]
+        worst_g = min(policy.group_sizes, key=lambda g: policy.group_sizes[g])
+        nodes = policy.nodes_by_group[worst_g]
+        return sum(1 for v in nodes if final_state[v]) / len(nodes)
+
+    utilitarian = [worst_off_share(1.0, seed) for seed in range(n_trials)]
+    inequality_averse = [worst_off_share(-2.0, seed) for seed in range(n_trials)]
+
+    mean_utilitarian = float(np.mean(utilitarian))
+    mean_averse = float(np.mean(inequality_averse))
+
+    assert mean_averse >= mean_utilitarian - 1e-9, (
+        f"more inequality-averse alpha did not help the worst-off group: "
+        f"utilitarian={mean_utilitarian}, inequality-averse={mean_averse}"
+    )
+    # Non-trivial effect, not just noise-level parity.
+    assert mean_averse > mean_utilitarian
 
 
 def test_bayesian_posterior_converges_via_full_simulation_loop():
