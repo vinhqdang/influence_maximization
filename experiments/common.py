@@ -43,6 +43,7 @@ Design notes on the experimental setup (see RESULTS.md for the full writeup):
 
 from __future__ import annotations
 
+import hashlib
 import time
 
 import numpy as np
@@ -98,13 +99,38 @@ ALPHA_VALUES = [1.0, 0.5, 0.0, -2.0, -8.0]  # utilitarian -> increasingly leximi
 
 ALGOS = ["kkt_greedy", "fair_greedy", "mf_bwi_fair", "repeated_greedy"]
 
-# A single master RNG seeds every random draw made anywhere in this study, so
-# the whole comparison is reproducible end to end from one seed.
-_MASTER_RNG = np.random.default_rng(0)
+# Every random draw in this study is seeded from context_seed(...) below, NOT
+# from a shared sequentially-consumed counter. A prior version used a single
+# _MASTER_RNG.integers() call site (next_seed()) shared across every algorithm
+# and sweep -- which meant the seed any given (sweep, param, algorithm, trial)
+# cell received depended on the exact order and count of every next_seed()
+# call that happened before it anywhere in the script. That made results
+# fragile to unrelated changes (e.g. editing one algorithm silently shifted
+# every other algorithm's random draws) and, concretely, caused two separate
+# runs of this script to produce different numbers for algorithms whose own
+# code had NOT changed, when something upstream in the call sequence had. See
+# the trial_seed / context_seed usage below: every seed now depends ONLY on
+# its own semantic identity (which sweep, which parameter value, which
+# algorithm, which trial), so it is the same regardless of what else runs
+# before or after it, and safe to compute independently/out of order.
+ROOT_SEED = 0
 
 
-def next_seed() -> int:
-    return int(_MASTER_RNG.integers(0, 2**31 - 1))
+def context_seed(*parts) -> int:
+    """Deterministic seed derived only from `parts` (order-independent w.r.t.
+    anything else in the program) -- ints are used as-is; anything else is
+    turned into a stable integer via SHA-256 of its repr (NOT Python's
+    built-in hash(), which is randomized per-process for str/bytes unless
+    PYTHONHASHSEED is fixed, and would silently reintroduce the same
+    run-to-run irreproducibility this replaces)."""
+    ints = []
+    for p in parts:
+        if isinstance(p, (int, np.integer, bool)):
+            ints.append(int(p))
+        else:
+            digest = hashlib.sha256(repr(p).encode("utf-8")).digest()[:8]
+            ints.append(int.from_bytes(digest, "little"))
+    return int(np.random.SeedSequence([ROOT_SEED, *ints]).generate_state(1)[0])
 
 
 def build_graph():
@@ -146,45 +172,55 @@ def compute_baseline_seed_sets(G, trial_seed: int) -> dict:
     group_of = graphs.group_of_map(G)
 
     seeds_kkt, _ = celf_greedy(
-        G, p_plus, k=K, num_sims=CELF_NUM_SIMS, rng=np.random.default_rng(next_seed())
+        G, p_plus, k=K, num_sims=CELF_NUM_SIMS,
+        rng=np.random.default_rng(context_seed("kkt_select", trial_seed)),
     )
     seeds_fair, _w, _reach = fair_welfare_greedy(
         G, p_plus, k=K, group_of=group_of, num_sims=FAIR_NUM_SIMS,
-        rng=np.random.default_rng(next_seed()),
+        rng=np.random.default_rng(context_seed("fair_select", trial_seed)),
     )
     return {"kkt_greedy": list(seeds_kkt), "fair_greedy": list(seeds_fair)}
 
 
-def run_baseline_forward(G, seed_set, true_beta, q_range, trial_seed, T=T) -> tuple[list, float]:
+def run_baseline_forward(G, seed_set, true_beta, q_range, trial_seed, algo, sweep, param, T=T) -> tuple[list, float]:
     """Re-stamp the graph's true params (q_range for this param value, same
     trial_seed => identical p_plus, different q) and run the seed-then-none
-    action sequence through the real sequential simulator."""
+    action sequence through the real sequential simulator.
+
+    `algo`/`sweep`/`param` identify this specific call for context_seed, so
+    forward-simulation noise is deterministic per (algo, sweep, param, trial)
+    -- independent draws across swept values as before, but no longer
+    dependent on call order elsewhere in the script."""
     t0 = time.perf_counter()
     graphs.assign_true_parameters(G, p_plus_range=P_PLUS_RANGE, q_range=q_range, seed=trial_seed)
     p_plus, q = true_params_from_graph(G)
     acts = seed_then_none_actions(G, seed_set, T)
     init = initial_state(G, seed_set)
-    rng = np.random.default_rng(next_seed())
+    rng = np.random.default_rng(context_seed("forward", algo, sweep, param, trial_seed))
     traj, _obs = simulate(G, init, p_plus, q, true_beta, acts, rng)
     runtime = time.perf_counter() - t0
     return traj, runtime
 
 
-def run_mfbwi_forward(G, true_beta, budget, alpha_fair, q_range, trial_seed, T=T) -> tuple[list, float]:
+def run_mfbwi_forward(G, true_beta, budget, alpha_fair, q_range, trial_seed, sweep, param, T=T) -> tuple[list, float]:
     graphs.assign_true_parameters(G, p_plus_range=P_PLUS_RANGE, q_range=q_range, seed=trial_seed)
     t0 = time.perf_counter()
     result = run_mf_bwi_fair(
-        G, true_beta=true_beta, T=T, budget=budget, alpha_fair=alpha_fair, seed=next_seed()
+        G, true_beta=true_beta, T=T, budget=budget, alpha_fair=alpha_fair,
+        seed=context_seed("mfbwi_forward", sweep, param, trial_seed),
     )
     runtime = time.perf_counter() - t0
     return result["trajectory"], runtime
 
 
-def run_repeatedgreedy_forward(G, true_beta, budget, q_range, trial_seed, T=T) -> tuple[list, float]:
+def run_repeatedgreedy_forward(G, true_beta, budget, q_range, trial_seed, sweep, param, T=T) -> tuple[list, float]:
     """Full T-round repeated_greedy run (acts every round, no alpha_fair --
     see module docstring above and im_lab/baselines/repeated_greedy.py)."""
     graphs.assign_true_parameters(G, p_plus_range=P_PLUS_RANGE, q_range=q_range, seed=trial_seed)
     t0 = time.perf_counter()
-    result = run_repeated_greedy(G, true_beta=true_beta, T=T, budget=budget, seed=next_seed())
+    result = run_repeated_greedy(
+        G, true_beta=true_beta, T=T, budget=budget,
+        seed=context_seed("repeated_forward", sweep, param, trial_seed),
+    )
     runtime = time.perf_counter() - t0
     return result["trajectory"], runtime

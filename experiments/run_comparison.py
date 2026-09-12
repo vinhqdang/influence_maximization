@@ -82,14 +82,14 @@ def run_beta_or_q_sweep(sweep_name, values, true_beta_of, q_range_of, alpha_fair
 
             for algo in ("kkt_greedy", "fair_greedy"):
                 traj, rt = C.run_baseline_forward(
-                    G, seed_sets[algo], true_beta, q_range, trial_seed
+                    G, seed_sets[algo], true_beta, q_range, trial_seed, algo, sweep_name, v
                 )
                 rows.append(metrics_row(sweep_name, v, algo, trial, traj, group_of, group_sizes, rt))
 
-            traj, rt = C.run_mfbwi_forward(G, true_beta, C.B, alpha_fair, q_range, trial_seed)
+            traj, rt = C.run_mfbwi_forward(G, true_beta, C.B, alpha_fair, q_range, trial_seed, sweep_name, v)
             rows.append(metrics_row(sweep_name, v, "mf_bwi_fair", trial, traj, group_of, group_sizes, rt))
 
-            traj, rt = C.run_repeatedgreedy_forward(G, true_beta, C.B, q_range, trial_seed)
+            traj, rt = C.run_repeatedgreedy_forward(G, true_beta, C.B, q_range, trial_seed, sweep_name, v)
             rows.append(metrics_row(sweep_name, v, "repeated_greedy", trial, traj, group_of, group_sizes, rt))
     return rows
 
@@ -111,12 +111,14 @@ def run_alpha_sweep(G, group_of, group_sizes):
         baseline_rt = {}
         for algo in ("kkt_greedy", "fair_greedy"):
             traj, rt = C.run_baseline_forward(
-                G, seed_sets[algo], C.ALPHA_SWEEP_BETA, q_range, trial_seed
+                G, seed_sets[algo], C.ALPHA_SWEEP_BETA, q_range, trial_seed, algo, "alpha", "fixed"
             )
             baseline_traj[algo] = traj
             baseline_rt[algo] = rt
 
-        traj, rt = C.run_repeatedgreedy_forward(G, C.ALPHA_SWEEP_BETA, C.B, q_range, trial_seed)
+        traj, rt = C.run_repeatedgreedy_forward(
+            G, C.ALPHA_SWEEP_BETA, C.B, q_range, trial_seed, "alpha", "fixed"
+        )
         baseline_traj["repeated_greedy"] = traj
         baseline_rt["repeated_greedy"] = rt
 
@@ -128,7 +130,7 @@ def run_alpha_sweep(G, group_of, group_sizes):
                         baseline_rt[algo],
                     )
                 )
-            traj, rt = C.run_mfbwi_forward(G, C.ALPHA_SWEEP_BETA, C.B, v, q_range, trial_seed)
+            traj, rt = C.run_mfbwi_forward(G, C.ALPHA_SWEEP_BETA, C.B, v, q_range, trial_seed, "alpha", v)
             rows.append(metrics_row("alpha", v, "mf_bwi_fair", trial, traj, group_of, group_sizes, rt))
     return rows
 
