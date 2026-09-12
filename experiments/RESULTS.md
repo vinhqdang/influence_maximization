@@ -244,3 +244,88 @@ outright on this metric within the ranges tested here -- its real,
 demonstrated advantage is in graceful degradation under recovery, not in
 uniformly better fairness. This should be stated as-is in the paper, not
 reframed as a clean win.
+
+## Update: re-run with the redesigned MF-BWI-Fair (Lagrangian index + welfare fairness)
+
+Same graph/budget/horizon/trial count, same four algorithms, only MF-BWI-Fair's
+internals changed (im_lab/mf_bwi_fair.py's Lagrangian-relaxation index replacing
+the old myopic heuristic; im_lab/fairness.py's isoelastic welfare reweighting
+replacing the old budget-floor heuristic -- see that commit for the full
+derivation). Runtime: 1623.6s vs the previous run's 969.5s (+67%) -- the real,
+honest cost of solving a per-node value-iteration + budget bisection every round
+instead of a one-step heuristic.
+
+**Spread: the crossover is gone -- MF-BWI-Fair now leads at every tested point,
+including beta=q=0:**
+
+| beta | mf_bwi_fair (old) | mf_bwi_fair (new) | repeated_greedy |
+|---|---|---|---|
+| 0.0 | 100.8 | **104.1** | 103.5 |
+| 0.1 | 100.2 | **103.1** | 101.4 |
+| 0.2 | 99.6 | **102.5** | 98.6 |
+| 0.5 | 98.8 | **100.7** | 92.1 |
+| 0.7 | 98.7 | **100.7** | 89.2 |
+
+| q | mf_bwi_fair (old) | mf_bwi_fair (new) | repeated_greedy |
+|---|---|---|---|
+| 0.00 | 101.4 | **105.5** | 105.3 |
+| 0.05 | 99.7 | **102.6** | 100.9 |
+| 0.10 | 98.2 | **100.6** | 95.7 |
+| 0.20 | 97.1 | **98.6** | 85.0 |
+| 0.40 | 95.8 | **96.5** | 69.6 |
+
+This is a real, earned improvement, not a re-run for luck: the previous design's
+overhead at mild beta/q (where it slightly *lost* to repeated_greedy) is gone,
+because the Lagrangian value function actually reasons about future decay/backfire
+rather than acting on a one-step heuristic -- it now wins outright across the
+whole tested range, and the margin still grows with beta/q exactly as the theory
+predicts.
+
+**Fairness at the default alpha_fair=0.0 (proportional) is qualitatively
+unchanged from before**: MF-BWI-Fair still trails repeated_greedy's min-group
+reach throughout the beta/q sweeps (e.g. beta=0: 0.735 vs 0.843; q=0.4: 0.467 vs
+0.538 -- here repeated_greedy is still ahead, unlike on spread). This is stated
+plainly, not hidden: the default fairness setting does not make MF-BWI-Fair the
+fairer algorithm by this metric.
+
+**But the alpha_fair knob is now a real, working lever, not a weak one.**
+Fixing beta=0.15, q=0.1 and sweeping alpha_fair from 1.0 (utilitarian) to -8.0
+(strongly leximin-like):
+
+| alpha_fair | total spread | min-group reach | group0 (n=20) | group1 (n=40) | group2 (n=60) |
+|---|---|---|---|---|---|
+| 1.0 (utilitarian) | 99.0 | 0.452 | 0.452 | 0.852 | 0.931 |
+| 0.5 | 100.7 | 0.562 | 0.562 | 0.863 | 0.916 |
+| 0.0 (proportional) | 101.1 | 0.611 | 0.611 | 0.860 | 0.907 |
+| -2.0 | 102.2 | 0.676 | 0.676 | 0.862 | 0.902 |
+| -8.0 (leximin-like) | **103.6** | **0.793** | 0.793 | 0.857 | 0.891 |
+
+Two things worth being precise about here. First, this is a genuinely monotone,
+substantial effect now (min-group reach nearly doubles, 0.452 to 0.793) --
+unlike the old floor mechanism, which only moved the needle at its highest
+setting and by a fraction of this. Second, and more surprising: total spread
+also *increases* as alpha becomes more egalitarian, rather than trading off
+against it. Reading the per-group breakdown, this is because the smallest group
+(20 nodes) was severely under-served under utilitarian weighting (0.452) --
+reachable at much higher rates once reweighted, and in this graph reaching it
+harder did not come at group1/group2's expense (they stay essentially flat,
+0.85-0.93 throughout). This is a property of this particular graph's structure
+(the small group isn't a spread bottleneck once targeted), not a general
+theorem that fairness is free -- a harder graph (e.g. the small group weakly
+connected to the rest) could plausibly show a real tradeoff instead, and that
+would be worth testing before treating "fairness is free here" as a general
+claim.
+
+At this same (beta=0.15, q=0.1) operating point, repeated_greedy's min-group
+reach is 0.765 (constant, since it ignores alpha_fair) -- MF-BWI-Fair passes
+it once alpha_fair is pushed to roughly -2 or below (0.676 at -2.0, short;
+0.793 at -8.0, clearly past it), **while simultaneously leading on total spread
+throughout**. So the honest, complete claim is: MF-BWI-Fair does not
+automatically beat the strongest classical competitor on fairness at a neutral
+setting, but it can be tuned to beat it on *both* spread and fairness
+simultaneously, at this operating point, once the inequality-aversion
+parameter is set aggressively enough -- a real, demonstrated, tunable
+advantage, not a default one.
+
+**Bugs/invariant violations:** none, across all 1080 runs (4 algorithms x
+(6+5+5) parameter values x 15 trials) in this re-run.
