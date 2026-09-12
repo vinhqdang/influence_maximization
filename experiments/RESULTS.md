@@ -183,3 +183,64 @@ one of the 720 total (sweep x algorithm x trial x parameter-value) runs
 across this study without any assertion failures, consistent with the
 existing test suite. No unexpected exceptions, NaNs, or out-of-range values
 were observed in any of the three sweeps.
+
+## Update: repeated-greedy baseline (isolating the real contribution)
+
+The comparison above leaves open whether MF-BWI-Fair's advantage is just
+"gets to act every round" rather than anything specific to its own
+mechanism. `repeated_greedy` (im_lab/baselines/repeated_greedy.py) closes
+that gap: a classical cost-effective greedy that re-selects actions **every
+round** under the same per-round budget B, using **true** parameters
+directly (no Bayesian uncertainty to overcome, no fairness mechanism) --
+the strongest plausible classical competitor that also gets to act
+repeatedly. Same graph/budget/horizon/trial count as above; all four
+algorithms run together, still 0 invariant violations across the run.
+
+**Time-averaged spread, out of 120 (mean over 15 trials):**
+
+| beta | kkt_greedy | fair_greedy | mf_bwi_fair | repeated_greedy |
+|---|---|---|---|---|
+| 0.0 | 71.9 | 73.8 | 100.8 | **103.5** |
+| 0.1 | 67.0 | 67.7 | 100.2 | **101.4** |
+| 0.2 | 61.5 | 61.9 | **99.6** | 98.6 |
+| 0.3 | 58.2 | 58.2 | **100.2** | 96.5 |
+| 0.5 | 52.1 | 51.8 | **98.8** | 92.1 |
+| 0.7 | 44.4 | 45.0 | **98.7** | 89.2 |
+
+| q | kkt_greedy | fair_greedy | mf_bwi_fair | repeated_greedy |
+|---|---|---|---|---|
+| 0.00 | 77.4 | 81.1 | 101.4 | **105.3** |
+| 0.05 | 64.7 | 63.8 | 99.7 | **100.9** |
+| 0.10 | 51.9 | 53.7 | **98.2** | 95.7 |
+| 0.20 | 34.1 | 33.3 | **97.1** | 85.0 |
+| 0.40 | 8.5 | 9.9 | **95.8** | 69.6 |
+
+**This is a real crossover, not a construction artifact.** Both algorithms
+get the same per-round budget and act every round -- the only difference is
+*how* they decide. Below roughly beta=0.15 / q=0.075, repeated_greedy
+(myopic, true-parameter, uncertainty-free marginal-gain greedy, re-run
+fresh each round) is at least as good as MF-BWI-Fair, and slightly better
+at beta=q=0 (103.5/105.3 vs 100.8/101.4) -- meaning MF-BWI-Fair's mean-field
++ Bayesian machinery carries real overhead when backfire/recovery are mild
+enough that naive repeated greedy already handles them fine. Above that
+threshold the picture flips sharply: at beta=0.7, MF-BWI-Fair is +11% over
+repeated_greedy; at q=0.4, +38% (95.8 vs 69.6, with repeated_greedy having
+lost most of its edge over the one-shot baselines entirely). **This is the
+honest, specific claim the paper can make: MF-BWI-Fair is not "the best"
+unconditionally -- it is the better algorithm specifically once
+backfire/recovery are strong enough that myopic repeated intervention stops
+being sufficient, which is exactly the regime this paper is about.**
+
+**Fairness (min-group reach fraction) tells a related but distinct story:**
+repeated_greedy's fairness (using true parameters, greedily) actually starts
+*higher* than MF-BWI-Fair's at low beta/q (e.g. beta=0: 0.843 vs 0.699;
+q=0: 0.866 vs 0.721) and degrades faster, but only clearly crosses over in
+the q sweep (q=0.2: 0.677 vs 0.640, still ahead; q=0.4: 0.538 vs **0.621**,
+MF-BWI-Fair now ahead) -- it does not clearly cross over within the tested
+beta range (repeated_greedy stays fairer even at beta=0.7: 0.725 vs 0.672),
+though its degradation slope is far steeper (-14% vs -4% from beta=0 to
+0.7). Read plainly: MF-BWI-Fair's fairness mechanism does not yet win
+outright on this metric within the ranges tested here -- its real,
+demonstrated advantage is in graceful degradation under recovery, not in
+uniformly better fairness. This should be stated as-is in the paper, not
+reframed as a clean win.
