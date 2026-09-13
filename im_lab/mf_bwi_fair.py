@@ -180,6 +180,7 @@ class MFBWIFair:
         n_bisect_iters: int = 40,
         n_vi_sweeps: int = 200,
         solver: str = "closed_form",
+        population_weighted: bool = True,
     ):
         if solver not in ("closed_form", "bisection"):
             raise ValueError(f"solver must be 'closed_form' or 'bisection', got {solver!r}")
@@ -197,6 +198,10 @@ class MFBWIFair:
         self.u_floor = u_floor
         self.n_bisect_iters = n_bisect_iters
         self.n_vi_sweeps = n_vi_sweeps
+        # See im_lab/fairness.py's module docstring ("Population-weighted vs.
+        # population-unweighted (egalitarian) welfare") for what this toggles and
+        # when each form is appropriate. Default True preserves prior behavior.
+        self.population_weighted = population_weighted
 
         self.group_of = group_of_map(G)
         self.group_sizes = graph_group_sizes(G)
@@ -268,7 +273,10 @@ class MFBWIFair:
             self.group_u_avg = self._group_active_fraction(state)
             self.group_round_count = {g: 1 for g in self.group_sizes}
 
-        w = group_welfare_weights(self.group_sizes, self.group_u_avg, self.alpha_fair, self.u_floor)
+        w = group_welfare_weights(
+            self.group_sizes, self.group_u_avg, self.alpha_fair, self.u_floor,
+            population_weighted=self.population_weighted,
+        )
 
         s_arr = np.array([1.0 if state[v] else 0.0 for v in self.nodes])
         p01_arr = np.array([p01[v] for v in self.nodes])
@@ -366,9 +374,9 @@ def run_mf_bwi_fair(
     simulator; the policy only ever sees posterior means derived from observations.
 
     Any extra keyword arguments (gamma, u_floor, solver, n_bisect_iters,
-    n_vi_sweeps, mf_tol, mf_max_iter, alpha0, beta0) are forwarded to MFBWIFair's constructor;
-    existing callers that only pass the original positional/keyword arguments are
-    unaffected.
+    n_vi_sweeps, mf_tol, mf_max_iter, alpha0, beta0, population_weighted) are
+    forwarded to MFBWIFair's constructor; existing callers that only pass the
+    original positional/keyword arguments are unaffected.
     """
     rng = np.random.default_rng(seed)
     p_plus_true, q_true = true_params_from_graph(G)

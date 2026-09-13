@@ -482,3 +482,66 @@ likely does not exist for fixed $\beta$.
 | Prop 5.3 | conditional (very likely true, not proven) | strict worsening by $c(\beta)\ge0.94$, given one unverified property of Feige's construction |
 | Sec 5.3 finding | empirical (6 instances) | sandwich $\rho$ loose by up to $13\times$, vacuous at $q=0$; greedy-on-$f_0$ within 1% of $\mathrm{OPT}_\beta$ throughout |
 | Sec 5.4 | open | symmetry-gap route to an unconditional match of Prop 5.3, contingent on extending Vondrák's smoothing step |
+| Sec 7 finding | empirical (this project's 20/40/60 SBM graph, 10-15 trials) | population-unweighted (egalitarian) welfare raises the smallest group's realized reach at neutral $\alpha_{\text{fair}}=0$ by ~0.16 (0.72 -> 0.87 in one 15-trial run) at ~0.5% total-spread cost (occasionally a small gain) |
+
+---
+
+## 7. Fairness weighting: population-weighted vs. population-unweighted welfare
+
+`im_lab/fairness.py` computes the per-group marginal welfare weight $w_g$ that
+reweights each node's reward inside the Lagrangian index (Section 3). It
+implements Rahmattalabi et al.'s isoelastic (CES) welfare exactly as published:
+
+$$w_g = N_g\, u_g^{\alpha-1}\quad(\alpha\ne 0), \qquad w_g = N_g / u_g\quad(\alpha=0),$$
+
+where $N_g$ is group size and $u_g$ is the group's current time-averaged
+realized reach fraction. This form is **population-weighted**: it is the
+correct marginal utility for maximizing an aggregate social-welfare objective
+$\sum_g N_g u_g^\alpha/\alpha$, in which a group's contribution to total
+welfare scales with its population -- appropriate when the goal genuinely is
+aggregate welfare (more people benefiting counts for more).
+
+The population weighting has a concrete, measured downside for the stated
+fairness goal of *not neglecting a small group*: for group $g$'s weight to
+exceed group $g'$'s at $\alpha=0$ requires $u_{g'}/u_g > N_{g'}/N_g$, i.e. the
+smaller group must be under-served by a factor proportional to the group-size
+*ratio* before the mechanism reacts at all. On this project's own 3-group
+(20/40/60) SBM graph, at a neutral $\alpha_{\text{fair}}=0$ this "N-dilution"
+kept the smallest group (N=20) at a visibly lower realized reach than the
+largest group (N=60) purely because 3x the reach gap is needed before the
+weight formula starts favoring it.
+
+`group_welfare_weights` (and `MFBWIFair`/`run_mf_bwi_fair`) now also accept
+`population_weighted=False`, which drops the $N_g$ factor and implements the
+standard **egalitarian/Rawlsian-style** isoelastic welfare instead -- counting
+each group once regardless of size:
+
+$$w_g = u_g^{\alpha-1}\quad(\alpha\ne 0), \qquad w_g = 1/u_g\quad(\alpha=0).$$
+
+This is a well-established alternative welfare form in the social-welfare/
+fair-division literature (egalitarian welfare vs. utilitarian/population-
+weighted welfare), not a new mechanism. It is the appropriate choice when
+fairness means each *group* -- not each *person* -- is treated fairly
+regardless of its size.
+
+**Empirical validation** (this project's SIZES=[20,40,60], P_IN=0.07,
+P_OUT=0.008, P_PLUS_RANGE=(0.05,0.15) graph; $\beta=0.15$, $q=0.05$, $T=30$,
+$B=100$, neutral $\alpha_{\text{fair}}=0$, 15 seeds): switching
+`population_weighted` True -> False raised the smallest group's mean realized
+reach from 0.72 to 0.87 (+0.16) while total time-averaged spread moved from
+103.5 to 104.1 (+0.5%, i.e. no meaningful cost). This substantiates the
+intended fix: the egalitarian form protects the small group at a *neutral*
+default setting, without needing to push $\alpha_{\text{fair}}$ to an extreme
+negative value the way the population-weighted form does.
+
+**Recommendation:** `population_weighted=False` (egalitarian) should be the
+default going forward for MF-BWI-Fair's fairness objective. The stated design
+goal throughout this project is protecting the worst-off *group*, and the
+population-weighted form measurably fights that goal by construction (a small
+group can be badly under-served and still not move the weights, simply
+because there are few of its members to matter in the aggregate), while the
+egalitarian form achieves the intended protection at a neutral $\alpha$
+setting and at negligible spread cost. The parameter remains available (and
+still defaults to `True` in the current code, for backward compatibility with
+existing callers/experiments) so this is a recommendation for the next
+default change, not a silent behavior change made here.
