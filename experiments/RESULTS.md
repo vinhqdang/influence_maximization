@@ -525,3 +525,49 @@ setting (still trails repeated_greedy's min-group reach there, as reported
 earlier), and no comparison here runs the original authors' own code. Both
 caveats stand; within them, this is now a real, published-baseline-inclusive
 result, not one resting on in-house baselines alone.
+
+## Update: fairness fixed at the source -- re-run with the egalitarian default
+
+The "does not yet win on fairness at a neutral setting" caveat above is now
+resolved, not by tuning alpha_fair, but by fixing what the diagnostic work
+in this project's history identified as the actual cause: Rahmattalabi et
+al.'s isoelastic welfare weight is population-WEIGHTED
+($w_g=N_g\cdot u_g^{\alpha-1}$), which requires a small group to be
+under-served by a factor proportional to its group-size disadvantage before
+the mechanism reacts at all. Switching `MFBWIFair`'s default to the
+population-UNweighted/egalitarian form ($w_g=u_g^{\alpha-1}$, see
+`docs/theory.md` Section 7) removes that dilution. This re-run uses that new
+default throughout (all sweeps, including the beta/q sweeps' neutral
+alpha_fair=0.0).
+
+**Min-group reach at the neutral default now meets or beats repeated_greedy
+almost everywhere it was previously losing:**
+
+| beta | mf_bwi_fair | repeated_greedy | | q | mf_bwi_fair | repeated_greedy |
+|---|---|---|---|---|---|---|
+| 0.0 | 0.856 | 0.849 | | 0.00 | 0.860 | 0.881 |
+| 0.2 | 0.852 | 0.832 | | 0.10 | 0.838 | 0.794 |
+| 0.5 | 0.834 | 0.789 | | 0.20 | 0.822 | 0.720 |
+| 0.7 | 0.824 | 0.766 | | 0.40 | 0.809 | 0.554 |
+
+The only point where MF-BWI-Fair does not lead is q=0.0 (0.860 vs. 0.881, a
+small gap in repeated_greedy's favor) -- everywhere else, including beta=0.0,
+it is now ahead, and the gap grows sharply with beta/q exactly like the
+spread story. **Total spread is essentially unchanged from before the
+fairness fix** (e.g. beta=0.7: 101.9 vs. the earlier default's 101.3; q=0.4:
+99.5 vs. 96.8) -- if anything marginally better, not a tradeoff paid for the
+fairness gain. The alpha_fair knob still works as an additional lever on top
+of this (alpha=1.0/utilitarian gives min-group reach 0.777, still below
+repeated_greedy's 0.803 at that operating point; alpha=0.5 already crosses
+above it at 0.833; more negative alpha pushes further, 0.856 at alpha=-8) --
+so the egalitarian form's improvement is in the DEFAULT/neutral case
+specifically, not a replacement for the tuning knob.
+
+**Revised honest scope:** MF-BWI-Fair now leads every published or in-house
+baseline tested on total spread everywhere except a statistical tie with
+repeated_greedy at beta=q=0 (the proven 1-1/e ceiling), AND leads on the
+fairness metric (min-group reach) at the neutral default setting everywhere
+except a small residual gap at q=0.0. The "no baseline here runs the
+original authors' own code" caveat still stands (see the code-availability
+findings in this project's history: official code exists for IMM, not for
+He-Kempe or Rahmattalabi et al.).
