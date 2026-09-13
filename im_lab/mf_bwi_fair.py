@@ -52,10 +52,17 @@ Lagrangian-relaxation template of:
 
 which bypasses proving indexability for our 3-action (NONE/CONVERT/MAINTAIN)
 setting (Killian et al. note this is "notoriously difficult" for M > 2 actions and
-do not attempt it either) by instead finding, via bisection, the smallest shared
-Lagrange multiplier lambda whose aggregate expected cost across all nodes is <= the
-round's budget B. See im_lab/lagrangian_index.py for the full derivation and the
-per-arm value-iteration + bisection machinery; this module only wires the network
+do not attempt it either) by instead finding the smallest shared Lagrange
+multiplier lambda whose aggregate expected cost across all nodes is <= the round's
+budget B. Originally this was done by bisection on lambda with value iteration per
+node (im_lab/lagrangian_index.py, still available via solver="bisection"). Because
+each node's MDP has only 2 states and 2 actions per state, its Lagrangian value is
+a max of 4 affine functions of lambda, so the per-node switch price (index) and the
+budget-matching lambda are available in closed form; im_lab/closed_form_index.py
+does exactly that and is the default (solver="closed_form"). See that module's
+docstring for the closed forms, what is proved (convexity in lambda, exactness of
+the index scan) and what is only checked numerically (indexability, i.e. that
+the paid-action region in lambda is a down-set). This module only wires the network
 model (mean-field beliefs, posterior means, group welfare weights) into it.
 
 --- Fairness (replaces the old per-group budget-floor heuristic) ---
@@ -79,7 +86,7 @@ from __future__ import annotations
 import networkx as nx
 import numpy as np
 
-from . import lagrangian_index
+from . import closed_form_index, lagrangian_index
 from .actions import Action, ACTION_COST
 from .bayes import BetaBernoulliTracker
 from .fairness import group_welfare_weights
@@ -172,7 +179,11 @@ class MFBWIFair:
         u_floor: float = 1e-3,
         n_bisect_iters: int = 40,
         n_vi_sweeps: int = 200,
+        solver: str = "closed_form",
     ):
+        if solver not in ("closed_form", "bisection"):
+            raise ValueError(f"solver must be 'closed_form' or 'bisection', got {solver!r}")
+        self.solver = solver
         self.G = G
         self.budget = budget
         # alpha_fair is now the isoelastic (CES) welfare exponent, NOT the old
@@ -264,30 +275,40 @@ class MFBWIFair:
         p10_arr = np.array([p10[v] for v in self.nodes])
         w_arr = np.array([w[self.group_of[v]] for v in self.nodes])
 
-        lam_star, action_is_paid, cost_arr, gap_arr, cost_if_paid = lagrangian_index.solve_lambda_bisection(
-            s_arr,
-            p01_arr,
-            p10_arr,
-            w_arr,
-            self.budget,
-            self.gamma,
-            float(ACTION_COST[Action.CONVERT]),
-            float(ACTION_COST[Action.MAINTAIN]),
-            n_bisect_iters=self.n_bisect_iters,
-            n_vi_sweeps=self.n_vi_sweeps,
-        )
+        cost_convert = float(ACTION_COST[Action.CONVERT])
+        cost_maintain = float(ACTION_COST[Action.MAINTAIN])
+        if self.solver == "closed_form":
+            lam_star, action_is_paid, cost_arr, gap_arr, cost_if_paid, index_arr = (
+                closed_form_index.solve_lambda_closed_form(
+                    s_arr, p01_arr, p10_arr, w_arr, self.budget, self.gamma,
+                    cost_convert, cost_maintain, return_indices=True,
+                )
+            )
+            # Fill priority: the closed-form index itself (the highest price at
+            # which the node would still act). Among nodes the matching skipped it
+            # is the natural ranking, and it is what the O(n log n) sort already
+            # produced, so no extra Bellman evaluation is needed.
+            fill_key = index_arr
+        else:
+            lam_star, action_is_paid, cost_arr, gap_arr, cost_if_paid = lagrangian_index.solve_lambda_bisection(
+                s_arr, p01_arr, p10_arr, w_arr, self.budget, self.gamma,
+                cost_convert, cost_maintain,
+                n_bisect_iters=self.n_bisect_iters, n_vi_sweeps=self.n_vi_sweeps,
+            )
+            fill_key = gap_arr
         action_is_paid = action_is_paid.copy()
         total_spend = float(cost_arr.sum())
 
         # Tie-break fill (step 6 of the redesign): any leftover budget from the
-        # bisection's discreteness is filled greedily by descending action-value
-        # gap at lambda*, exactly like the "act or don't" tie-breaking Lagrangian
-        # index methods use -- this keeps the hard budget invariant intact without
+        # matching's discreteness is filled greedily by descending fill_key
+        # (closed-form index, or action-value gap at lambda* for the bisection
+        # path), exactly like the "act or don't" tie-breaking Lagrangian index
+        # methods use -- this keeps the hard budget invariant intact without
         # reintroducing any per-group floor/quota mechanism.
         leftover = self.budget - total_spend
         if leftover > 1e-9:
             not_paid_idx = np.where(~action_is_paid)[0]
-            order = sorted(not_paid_idx.tolist(), key=lambda i: gap_arr[i], reverse=True)
+            order = sorted(not_paid_idx.tolist(), key=lambda i: fill_key[i], reverse=True)
             for i in order:
                 c = float(cost_if_paid[i])
                 if c <= leftover + 1e-9:
@@ -344,8 +365,8 @@ def run_mf_bwi_fair(
     simulator.true_params_from_graph) define the hidden ground truth used by the
     simulator; the policy only ever sees posterior means derived from observations.
 
-    Any extra keyword arguments (gamma, u_floor, n_bisect_iters, n_vi_sweeps,
-    mf_tol, mf_max_iter, alpha0, beta0) are forwarded to MFBWIFair's constructor;
+    Any extra keyword arguments (gamma, u_floor, solver, n_bisect_iters,
+    n_vi_sweeps, mf_tol, mf_max_iter, alpha0, beta0) are forwarded to MFBWIFair's constructor;
     existing callers that only pass the original positional/keyword arguments are
     unaffected.
     """

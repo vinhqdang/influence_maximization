@@ -38,6 +38,16 @@ We do not attempt to prove indexability (Whittle-style) for this >2-action setti
 Killian et al. explicitly note that is "notoriously difficult" for M > 2 actions and
 avoid it via exactly this Lagrangian-bisection route instead of a closed-form index.
 
+NOTE (status): this bisection + value-iteration path is no longer the default
+solver used by im_lab/mf_bwi_fair.py. Because each arm has only 2 states and 2
+actions per state, the optimal Lagrangian value is a max of 4 affine functions of
+lambda and every arm's switch price is available in closed form --
+im_lab/closed_form_index.py implements that O(n log n)-per-round replacement
+(MFBWIFair(solver="closed_form"), the default). Everything in this module is kept
+intact, both as the selectable alternative (MFBWIFair(solver="bisection")) and as
+the independent numerical oracle the closed form is tested against
+(tests/test_closed_form_index.py).
+
 All arms share (gamma, c_convert, c_maintain); only (p01, p10, w, s) vary per arm.
 Everything below is vectorized over arms with numpy for speed (a Python-level loop
 per arm, times ~50 bisection steps, times ~200 value-iteration sweeps, would be slow

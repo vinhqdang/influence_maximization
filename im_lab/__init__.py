@@ -16,5 +16,6 @@ __all__ = [
     "simulator",
     "fairness",
     "lagrangian_index",
+    "closed_form_index",
     "mf_bwi_fair",
 ]
