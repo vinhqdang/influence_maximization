@@ -387,3 +387,35 @@ reach from 0.461 at alpha=1 to 0.795 at alpha=-8, surpassing repeated_greedy's
 roughly -2 or below) -- see the underlying CSVs for exact figures; the
 narrative conclusions above stand unchanged. Zero invariant violations across
 all 1080 runs.
+
+## Update: re-run under the theory-aligned simulator + closed-form index
+
+Two changes since the last section: (1) `im_lab/simulator.py` now uses the
+"layered" transition (docs/theory.md Section 0) -- a positive trial from an
+active in-neighbour can rescue a node that would otherwise recover or be
+backfired that round, which is what makes the theory's monotonicity/coverage
+arguments apply to the actual simulated process; (2) MF-BWI-Fair's per-round
+decision uses the closed-form index (docs/theory.md Section 3) instead of
+bisection, ~130x faster per decision. Total wall-clock for this run was
+*longer* (1952.1s vs 1594.4s) -- expected, since the layered rule draws more
+trials per round for every algorithm's forward simulation (not just
+MF-BWI-Fair's), and that cost dominates the total; MF-BWI-Fair's own decision
+step got much cheaper, it just isn't the bottleneck of this experiment script.
+
+**The finding is unchanged under the corrected dynamics.** At beta=q=0,
+MF-BWI-Fair and repeated_greedy remain statistically tied (104.2 vs 105.0;
+105.7 vs 107.3) -- consistent with Section 4's proof that neither can beat the
+$(1-1/e)$ ceiling there. The moment beta or q departs from zero, MF-BWI-Fair
+takes a clear, growing lead: beta=0.2 (102.9 vs 102.0) through beta=0.7 (101.3
+vs 93.9); q=0.05 (103.5 vs 102.2) through q=0.4 (96.8 vs 74.4). Fairness:
+min-group reach is again monotone in alpha_fair (0.506 at alpha=1 to 0.816 at
+alpha=-8) with total spread also rising (99.7 to 105.5) rather than trading
+off, and MF-BWI-Fair again passes repeated_greedy's fixed 0.803 only once
+alpha_fair reaches -8 (0.816) -- narrower margin than the previous run's
+crossover, but the same crossover, not a reversal.
+
+**Conclusion:** the theory-alignment and speed work changed the mechanics
+(a corrected transition rule, a much faster but exactly equivalent decision
+procedure) without changing the empirical story this project is built on.
+That is the outcome you want from a "fix a bug, re-verify" pass -- a result
+that survives closer scrutiny, not one that depended on the bug.
