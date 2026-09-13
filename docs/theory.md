@@ -534,14 +534,28 @@ intended fix: the egalitarian form protects the small group at a *neutral*
 default setting, without needing to push $\alpha_{\text{fair}}$ to an extreme
 negative value the way the population-weighted form does.
 
-**Recommendation:** `population_weighted=False` (egalitarian) should be the
-default going forward for MF-BWI-Fair's fairness objective. The stated design
-goal throughout this project is protecting the worst-off *group*, and the
+**Default switched to `population_weighted=False`.** The stated design goal
+throughout this project is protecting the worst-off *group*, and the
 population-weighted form measurably fights that goal by construction (a small
 group can be badly under-served and still not move the weights, simply
 because there are few of its members to matter in the aggregate), while the
 egalitarian form achieves the intended protection at a neutral $\alpha$
-setting and at negligible spread cost. The parameter remains available (and
-still defaults to `True` in the current code, for backward compatibility with
-existing callers/experiments) so this is a recommendation for the next
-default change, not a silent behavior change made here.
+setting and at negligible spread cost.
+
+Before switching, flipping the default broke an existing small-graph test
+(`tests/test_mf_bwi_fair.py`, sizes=[8,16], $T=6$), which looked at first like
+a possible numerical instability at extreme $\alpha$ (recall $w_g=u_g^{\alpha-1}$
+can be large when $u_g$ is near its floor). A dedicated diagnostic run
+(round-by-round traces of $u_g$, $w_g$, and per-group spend/reach across both
+weighting modes) ruled that out: no NaN/inf, no degenerate ties -- every value
+stayed an ordinary finite float and the mechanism tracked whichever group was
+*actually* lower-$u_g$ correctly at every step. The real cause was the test's
+premise: it hardcoded "the smaller group is the worst-off one," which only
+holds under the population-weighted form (where $N_g$-dilution chronically
+starves the small group). Under the egalitarian form on that specific small
+graph, a fixed budget covers a larger *fraction* of the small group, so it
+saturates faster and becomes the *better*-off group at the utilitarian
+baseline -- the mechanism was correctly redirecting effort to the group that
+was actually behind, just not the one the test assumed. The test now
+determines the worst-off group per-seed from the $\alpha=1$ baseline rather
+than hardcoding it, and passes under the new default.

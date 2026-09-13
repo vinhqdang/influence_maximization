@@ -180,7 +180,7 @@ class MFBWIFair:
         n_bisect_iters: int = 40,
         n_vi_sweeps: int = 200,
         solver: str = "closed_form",
-        population_weighted: bool = True,
+        population_weighted: bool = False,
     ):
         if solver not in ("closed_form", "bisection"):
             raise ValueError(f"solver must be 'closed_form' or 'bisection', got {solver!r}")

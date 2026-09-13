@@ -156,30 +156,49 @@ def test_tie_break_fill_reduces_leftover_budget_in_the_full_policy():
 
 def test_lower_alpha_shifts_realized_reach_toward_worst_off_group():
     """Replaces the old fairness-floor test (no longer meaningful: floors are
-    gone). Checks the new mechanism's actual intended effect: on an SBM graph with
-    an unequal-size group split, decreasing alpha_fair (more inequality-averse)
-    should not decrease -- and, on average, should increase -- the smaller/worse-
-    off group's realized reach share, averaged over enough trials to not be flaky.
+    gone). Checks the new mechanism's actual intended effect: decreasing
+    alpha_fair (more inequality-averse) should not decrease -- and, on
+    average, should increase -- the WORST-OFF group's realized reach share,
+    averaged over enough trials to not be flaky.
+
+    Which group is "worst-off" is determined per-seed from the alpha=1.0
+    (utilitarian, no fairness weighting) baseline, NOT hardcoded to the
+    smaller group by size. An earlier version of this test assumed the
+    smaller group (by node count) is always the worst-off one -- true under
+    the population-weighted welfare form (where the group-size factor
+    actively suppresses a small group's weight), but this project's default
+    is the population-UNweighted/egalitarian form, under which a smaller
+    group can actually saturate FASTER under a fixed budget (more of it is
+    covered per seed) and end up the BETTER-off one on a small graph -- a
+    confirmed, non-buggy effect (see the diagnostic investigation in this
+    project's history), not something this test should assume away.
     """
-    sizes = [8, 16]  # unequal groups; group 0 (the smaller) is the "worst-off" one
+    sizes = [8, 16]
     n_trials = 20
     T, budget = 6, 8
 
-    def worst_off_share(alpha_fair: float, seed: int) -> float:
+    def group_reach(alpha_fair: float, seed: int) -> dict:
         G = graphs.stochastic_block_model_graph(sizes, p_in=0.3, p_out=0.03, seed=seed)
         graphs.assign_true_parameters(G, seed=seed)
         result = run_mf_bwi_fair(G, true_beta=0.1, T=T, budget=budget, alpha_fair=alpha_fair, seed=seed)
         policy = result["policy"]
         final_state = result["trajectory"][-1]
-        worst_g = min(policy.group_sizes, key=lambda g: policy.group_sizes[g])
-        nodes = policy.nodes_by_group[worst_g]
-        return sum(1 for v in nodes if final_state[v]) / len(nodes)
+        return {
+            g: sum(1 for v in nodes if final_state[v]) / len(nodes)
+            for g, nodes in policy.nodes_by_group.items()
+        }
 
-    utilitarian = [worst_off_share(1.0, seed) for seed in range(n_trials)]
-    inequality_averse = [worst_off_share(-2.0, seed) for seed in range(n_trials)]
+    utilitarian_worst = []
+    averse_same_group = []
+    for seed in range(n_trials):
+        reach_util = group_reach(1.0, seed)
+        worst_g = min(reach_util, key=lambda g: reach_util[g])
+        reach_averse = group_reach(-2.0, seed)
+        utilitarian_worst.append(reach_util[worst_g])
+        averse_same_group.append(reach_averse[worst_g])
 
-    mean_utilitarian = float(np.mean(utilitarian))
-    mean_averse = float(np.mean(inequality_averse))
+    mean_utilitarian = float(np.mean(utilitarian_worst))
+    mean_averse = float(np.mean(averse_same_group))
 
     assert mean_averse >= mean_utilitarian - 1e-9, (
         f"more inequality-averse alpha did not help the worst-off group: "
