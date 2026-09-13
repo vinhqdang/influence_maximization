@@ -1,11 +1,14 @@
-"""Comparative study: MF-BWI-Fair vs. three baselines -- two one-shot classical
-baselines (celf-greedy, fair-welfare-greedy) and one sequential classical
-baseline that also acts every round under the same budget (repeated_greedy,
-see im_lab/baselines/repeated_greedy.py) -- on a fixed synthetic SBM graph,
+"""Comparative study: MF-BWI-Fair vs. four baselines -- three one-shot classical
+baselines (celf-greedy, fair-welfare-greedy, and IMM -- Tang, Shi & Xiao 2015,
+the real published near-linear-time SOTA classical algorithm, see
+im_lab/baselines/imm.py) and one sequential classical baseline that also acts
+every round under the same budget (repeated_greedy, see
+im_lab/baselines/repeated_greedy.py) -- on a fixed synthetic SBM graph,
 sweeping backfire intensity (beta), recovery rate (q), and the fairness knob
 (alpha_fair) independently. repeated_greedy isolates whether MF-BWI-Fair's
 advantage comes from its specific machinery or merely from "gets to act every
-round" (see RESULTS.md).
+round"; IMM is included so the comparison has a named, citable published
+algorithm rather than only in-house baselines (see RESULTS.md).
 
 Run with: python experiments/run_comparison.py
 Outputs under experiments/results/: *.csv (raw per-trial rows), *.png (plots).
@@ -34,12 +37,14 @@ os.makedirs(RESULTS_DIR, exist_ok=True)
 ALGO_LABELS = {
     "kkt_greedy": "KKT-greedy (one-shot)",
     "fair_greedy": "Fair-greedy (one-shot)",
+    "imm": "IMM (Tang-Shi-Xiao 2015, one-shot)",
     "mf_bwi_fair": "MF-BWI-Fair (sequential)",
     "repeated_greedy": "Repeated-greedy (sequential, no fairness/uncertainty)",
 }
 ALGO_COLORS = {
     "kkt_greedy": "#d95f02",
     "fair_greedy": "#7570b3",
+    "imm": "#66a61e",
     "mf_bwi_fair": "#1b9e77",
     "repeated_greedy": "#e6ab02",
 }
@@ -80,7 +85,7 @@ def run_beta_or_q_sweep(sweep_name, values, true_beta_of, q_range_of, alpha_fair
             true_beta = true_beta_of(v)
             q_range = q_range_of(v)
 
-            for algo in ("kkt_greedy", "fair_greedy"):
+            for algo in ("kkt_greedy", "fair_greedy", "imm"):
                 traj, rt = C.run_baseline_forward(
                     G, seed_sets[algo], true_beta, q_range, trial_seed, algo, sweep_name, v
                 )
@@ -109,7 +114,7 @@ def run_alpha_sweep(G, group_of, group_sizes):
 
         baseline_traj = {}
         baseline_rt = {}
-        for algo in ("kkt_greedy", "fair_greedy"):
+        for algo in ("kkt_greedy", "fair_greedy", "imm"):
             traj, rt = C.run_baseline_forward(
                 G, seed_sets[algo], C.ALPHA_SWEEP_BETA, q_range, trial_seed, algo, "alpha", "fixed"
             )
@@ -123,7 +128,7 @@ def run_alpha_sweep(G, group_of, group_sizes):
         baseline_rt["repeated_greedy"] = rt
 
         for v in C.ALPHA_VALUES:
-            for algo in ("kkt_greedy", "fair_greedy", "repeated_greedy"):
+            for algo in ("kkt_greedy", "fair_greedy", "imm", "repeated_greedy"):
                 rows.append(
                     metrics_row(
                         "alpha", v, algo, trial, baseline_traj[algo], group_of, group_sizes,

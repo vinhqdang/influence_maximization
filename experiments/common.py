@@ -39,6 +39,20 @@ Design notes on the experimental setup (see RESULTS.md for the full writeup):
   one-shot baselines (and unlike mf_bwi_fair), it does not use alpha_fair at
   all, so in the alpha sweep it is computed once per trial and replicated
   across alpha_fair values exactly like kkt_greedy/fair_greedy.
+
+- A FIFTH algorithm, imm (im_lab.baselines.imm), is a faithful
+  reimplementation of a real, named, published algorithm -- Tang, Shi & Xiao's
+  IMM (SIGMOD 2015), the standard near-linear-time (1-1/e-epsilon)-approximate
+  classical IM algorithm -- included so the comparison has at least one
+  baseline that is not something built from scratch for this project. Like
+  kkt_greedy/fair_greedy it is a one-shot seed-selection baseline under plain
+  progressive IC (no backfire/recovery/fairness/uncertainty machinery of its
+  own), computed once per trial from p_plus alongside the other one-shot
+  baselines and run forward through the same sequential simulator. Since it
+  targets the same classical objective as kkt_greedy, it is expected to
+  degrade similarly under backfire/recovery -- its value here is being a
+  citable, published point of comparison, not a qualitatively different
+  competitor.
 """
 
 from __future__ import annotations
@@ -50,6 +64,7 @@ import numpy as np
 
 from im_lab import graphs
 from im_lab.baselines.fair_greedy import fair_welfare_greedy
+from im_lab.baselines.imm import imm_select
 from im_lab.baselines.kkt_greedy import celf_greedy
 from im_lab.baselines.repeated_greedy import run_repeated_greedy
 from im_lab.mf_bwi_fair import run_mf_bwi_fair
@@ -97,7 +112,8 @@ BETA_VALUES = [0.0, 0.1, 0.2, 0.3, 0.5, 0.7]
 Q_VALUES = [0.0, 0.05, 0.1, 0.2, 0.4]
 ALPHA_VALUES = [1.0, 0.5, 0.0, -2.0, -8.0]  # utilitarian -> increasingly leximin-like
 
-ALGOS = ["kkt_greedy", "fair_greedy", "mf_bwi_fair", "repeated_greedy"]
+ALGOS = ["kkt_greedy", "fair_greedy", "imm", "mf_bwi_fair", "repeated_greedy"]
+IMM_EPSILON = 0.5  # IMM's approximation-guarantee parameter (see baselines/imm.py)
 
 # Every random draw in this study is seeded from context_seed(...) below, NOT
 # from a shared sequentially-consumed counter. A prior version used a single
@@ -179,7 +195,15 @@ def compute_baseline_seed_sets(G, trial_seed: int) -> dict:
         G, p_plus, k=K, group_of=group_of, num_sims=FAIR_NUM_SIMS,
         rng=np.random.default_rng(context_seed("fair_select", trial_seed)),
     )
-    return {"kkt_greedy": list(seeds_kkt), "fair_greedy": list(seeds_fair)}
+    seeds_imm = imm_select(
+        G, p_plus, k=K, epsilon=IMM_EPSILON,
+        rng=np.random.default_rng(context_seed("imm_select", trial_seed)),
+    )
+    return {
+        "kkt_greedy": list(seeds_kkt),
+        "fair_greedy": list(seeds_fair),
+        "imm": list(seeds_imm),
+    }
 
 
 def run_baseline_forward(G, seed_set, true_beta, q_range, trial_seed, algo, sweep, param, T=T) -> tuple[list, float]:
