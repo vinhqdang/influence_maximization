@@ -26,11 +26,19 @@ $$\big[\,v\in A_t \ \wedge\ R^t_v=0 \ \wedge\ \forall u\in A_t\cap N_{\mathrm{in
 
 That is: an active node stays active unless it recovers or is backfired by an
 active in-neighbour, and *any* node (active or not) is (re)activated by a
-successful positive trial from an active in-neighbour. The second clause
-firing for an already-active node is what makes the one-step map
-$A_t\mapsto A_{t+1}$ **monotone in $A_t$** (more active nodes now can only
-produce more active nodes next round, for fixed randomness); this is the
-property every proof below rests on.
+successful positive trial from an active in-neighbour.
+
+**Monotonicity of the one-step map -- only at $\beta=0$.** For $\beta=0$ the
+map $A_t\mapsto A_{t+1}$ is monotone in $A_t$ for fixed randomness: both
+clauses can only gain from more active nodes. This is what Lemma 1.2 rests on.
+For $\beta>0$ it is **not** monotone: the backfire clause is anti-monotone (an
+additional active in-neighbour can kill $v$), and `tests/test_simulator.py`
+pins this with an exact shared-randomness witness at $\beta>0$ alongside the
+monotone check at $\beta=0$. The Section 2 proofs never assume monotonicity
+of the $\beta$-process itself; the couplings there only use (i) monotonicity
+of the two $\beta=0$ surrogates and (ii) the uniform bound $\delta_v$ on the
+backfire kill probability, which holds whatever subset of in-neighbours is
+active.
 
 > **Modelling note (must be aligned with the code).** The simulator in
 > `im_lab/simulator.py` currently draws positive trials only into *inactive*
