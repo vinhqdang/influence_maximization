@@ -329,3 +329,61 @@ advantage, not a default one.
 
 **Bugs/invariant violations:** none, across all 1080 runs (4 algorithms x
 (6+5+5) parameter values x 15 trials) in this re-run.
+
+## Update: final run under the fixed (reproducible) harness -- this supersedes the numbers above
+
+Both re-runs above were generated before a real reproducibility defect in the
+experiment harness was found and fixed: every seed used to come from one
+shared, sequentially-consumed counter (`next_seed()`/`_MASTER_RNG`) reused
+across every algorithm, sweep, and trial, so the seed any given cell got
+depended on the exact order/count of every prior call anywhere in the script
+-- confirmed concretely when a stray concurrent process produced different
+`kkt_greedy` numbers despite `kkt_greedy`'s own code being unchanged. Fixed by
+deriving every seed solely from its own (sweep, parameter, algorithm, trial)
+identity via `context_seed()` (SHA-256-backed, not Python's process-randomized
+`hash()`); verified two independent process runs now produce byte-identical
+output. This section's numbers are from the first run under the fixed harness
+and are the ones to cite going forward -- they match the qualitative story
+above closely (as expected, same algorithms, same graph, just a different,
+now-trustworthy random draw), with small (1-3%) Monte Carlo differences from
+the pre-fix numbers, and one nuance worth stating precisely rather than
+smoothing over:
+
+| beta | mf_bwi_fair | repeated_greedy |
+|---|---|---|
+| 0.0 | 103.5 | **104.4** |
+| 0.1 | **103.0** | 101.7 |
+| 0.2 | **102.2** | 98.4 |
+| 0.3 | **102.0** | 97.0 |
+| 0.5 | **101.1** | 91.7 |
+| 0.7 | **100.7** | 89.5 |
+
+| q | mf_bwi_fair | repeated_greedy |
+|---|---|---|
+| 0.00 | 104.8 | **104.9** |
+| 0.05 | **102.8** | 100.0 |
+| 0.10 | **100.9** | 95.2 |
+| 0.20 | **98.6** | 86.1 |
+| 0.40 | **96.2** | 69.0 |
+
+**At exactly beta=q=0, the two are statistically tied (within 1%), and this
+run happens to land with repeated_greedy marginally ahead** (104.4 vs 103.5,
+104.9 vs 103.5... 104.8) -- the opposite of the previous (pre-fix) run's
+marginal lead for MF-BWI-Fair at that same point. This is Monte Carlo noise
+at a near-tie, not a contradiction: the moment beta or q departs from 0 even
+slightly (0.05-0.1), MF-BWI-Fair takes a clear, robust lead that grows
+monotonically, exactly as in every previous run. The honest claim is
+therefore: **MF-BWI-Fair and repeated_greedy are roughly tied with no
+backfire/recovery present, and MF-BWI-Fair wins clearly and increasingly as
+soon as either is present at all** -- not "MF-BWI-Fair wins everywhere
+including the zero point," which the earlier write-up's exact numbers
+happened to suggest but a single boundary comparison can't actually support.
+
+Fairness (min-group reach) and the alpha_fair sweep both reproduce the same
+qualitative pattern as before (repeated_greedy fairer at the default/neutral
+setting throughout beta/q; MF-BWI-Fair's alpha_fair knob moves min-group
+reach from 0.461 at alpha=1 to 0.795 at alpha=-8, surpassing repeated_greedy's
+0.764 at that fixed beta=0.15/q=0.1 operating point once alpha is pushed to
+roughly -2 or below) -- see the underlying CSVs for exact figures; the
+narrative conclusions above stand unchanged. Zero invariant violations across
+all 1080 runs.
