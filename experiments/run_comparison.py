@@ -38,6 +38,7 @@ ALGO_LABELS = {
     "kkt_greedy": "KKT-greedy (one-shot)",
     "fair_greedy": "Fair-greedy (one-shot)",
     "imm": "IMM (Tang-Shi-Xiao 2015, one-shot)",
+    "robust_kempe": "Robust-Kempe (He-Kempe 2016, one-shot, bicriteria)",
     "mf_bwi_fair": "MF-BWI-Fair (sequential)",
     "repeated_greedy": "Repeated-greedy (sequential, no fairness/uncertainty)",
 }
@@ -45,6 +46,7 @@ ALGO_COLORS = {
     "kkt_greedy": "#d95f02",
     "fair_greedy": "#7570b3",
     "imm": "#66a61e",
+    "robust_kempe": "#a6761d",
     "mf_bwi_fair": "#1b9e77",
     "repeated_greedy": "#e6ab02",
 }
@@ -54,7 +56,7 @@ ALGO_COLORS = {
 SWEEP_SEED_OFFSET = {"beta": 1, "q": 2, "alpha": 3}
 
 
-def metrics_row(sweep, param, algo, trial, trajectory, group_of, group_sizes, runtime_s):
+def metrics_row(sweep, param, algo, trial, trajectory, group_of, group_sizes, runtime_s, n_seeds=None):
     reach = C.group_reach_fractions(trajectory, group_of, group_sizes)
     groups = sorted(group_sizes)
     row = {
@@ -65,6 +67,13 @@ def metrics_row(sweep, param, algo, trial, trajectory, group_of, group_sizes, ru
         "time_avg_spread": C.time_avg_spread(trajectory),
         "min_group_reach": min(reach.values()),
         "runtime_s": runtime_s,
+        # n_seeds/round0_cost matter for robust_kempe: a bicriteria algorithm
+        # that may spend more than one round's budget upfront (see
+        # common.py's compute_baseline_seed_sets) -- recorded for every
+        # one-shot baseline (== K for all but robust_kempe) so this is
+        # visible and auditable in the raw CSV, not just asserted in prose.
+        "n_seeds": n_seeds,
+        "round0_cost": (n_seeds * 5) if n_seeds is not None else None,
     }
     for g in groups:
         row[f"group{g}_reach"] = reach[g]
@@ -85,11 +94,14 @@ def run_beta_or_q_sweep(sweep_name, values, true_beta_of, q_range_of, alpha_fair
             true_beta = true_beta_of(v)
             q_range = q_range_of(v)
 
-            for algo in ("kkt_greedy", "fair_greedy", "imm"):
+            for algo in ("kkt_greedy", "fair_greedy", "imm", "robust_kempe"):
                 traj, rt = C.run_baseline_forward(
                     G, seed_sets[algo], true_beta, q_range, trial_seed, algo, sweep_name, v
                 )
-                rows.append(metrics_row(sweep_name, v, algo, trial, traj, group_of, group_sizes, rt))
+                rows.append(metrics_row(
+                    sweep_name, v, algo, trial, traj, group_of, group_sizes, rt,
+                    n_seeds=len(seed_sets[algo]),
+                ))
 
             traj, rt = C.run_mfbwi_forward(G, true_beta, C.B, alpha_fair, q_range, trial_seed, sweep_name, v)
             rows.append(metrics_row(sweep_name, v, "mf_bwi_fair", trial, traj, group_of, group_sizes, rt))
@@ -114,7 +126,7 @@ def run_alpha_sweep(G, group_of, group_sizes):
 
         baseline_traj = {}
         baseline_rt = {}
-        for algo in ("kkt_greedy", "fair_greedy", "imm"):
+        for algo in ("kkt_greedy", "fair_greedy", "imm", "robust_kempe"):
             traj, rt = C.run_baseline_forward(
                 G, seed_sets[algo], C.ALPHA_SWEEP_BETA, q_range, trial_seed, algo, "alpha", "fixed"
             )
@@ -128,11 +140,12 @@ def run_alpha_sweep(G, group_of, group_sizes):
         baseline_rt["repeated_greedy"] = rt
 
         for v in C.ALPHA_VALUES:
-            for algo in ("kkt_greedy", "fair_greedy", "imm", "repeated_greedy"):
+            for algo in ("kkt_greedy", "fair_greedy", "imm", "robust_kempe", "repeated_greedy"):
+                n_seeds = len(seed_sets[algo]) if algo in seed_sets else None
                 rows.append(
                     metrics_row(
                         "alpha", v, algo, trial, baseline_traj[algo], group_of, group_sizes,
-                        baseline_rt[algo],
+                        baseline_rt[algo], n_seeds=n_seeds,
                     )
                 )
             traj, rt = C.run_mfbwi_forward(G, C.ALPHA_SWEEP_BETA, C.B, v, q_range, trial_seed, "alpha", v)

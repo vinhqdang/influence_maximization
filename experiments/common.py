@@ -67,6 +67,7 @@ from im_lab.baselines.fair_greedy import fair_welfare_greedy
 from im_lab.baselines.imm import imm_select
 from im_lab.baselines.kkt_greedy import celf_greedy
 from im_lab.baselines.repeated_greedy import run_repeated_greedy
+from im_lab.baselines.robust_kempe import robust_select
 from im_lab.mf_bwi_fair import run_mf_bwi_fair
 from im_lab.simulator import (
     count_active,
@@ -112,8 +113,19 @@ BETA_VALUES = [0.0, 0.1, 0.2, 0.3, 0.5, 0.7]
 Q_VALUES = [0.0, 0.05, 0.1, 0.2, 0.4]
 ALPHA_VALUES = [1.0, 0.5, 0.0, -2.0, -8.0]  # utilitarian -> increasingly leximin-like
 
-ALGOS = ["kkt_greedy", "fair_greedy", "imm", "mf_bwi_fair", "repeated_greedy"]
+ALGOS = ["kkt_greedy", "fair_greedy", "imm", "robust_kempe", "mf_bwi_fair", "repeated_greedy"]
 IMM_EPSILON = 0.5  # IMM's approximation-guarantee parameter (see baselines/imm.py)
+
+# He & Kempe's Saturate Greedy is a BICRITERIA algorithm: it may return more
+# than K seeds (up to beta*K = (1+ln|Sigma|+ln(3/gamma))*K, see robust_kempe.py)
+# in exchange for its worst-case-across-scenarios guarantee. We do not cap
+# this -- the actual seed count/cost it uses is recorded and reported as-is,
+# not silently truncated to K (that would void its own guarantee). gamma=0.3
+# and a modest num_sims keep the binary search's per-iteration Monte-Carlo
+# cost tractable at this graph size; both are tuning choices, not from the
+# paper (see robust_kempe.py's own docstring for what IS from the paper).
+ROBUST_KEMPE_GAMMA = 0.3
+ROBUST_KEMPE_NUM_SIMS = 60
 
 # Every random draw in this study is seeded from context_seed(...) below, NOT
 # from a shared sequentially-consumed counter. A prior version used a single
@@ -199,10 +211,29 @@ def compute_baseline_seed_sets(G, trial_seed: int) -> dict:
         G, p_plus, k=K, epsilon=IMM_EPSILON,
         rng=np.random.default_rng(context_seed("imm_select", trial_seed)),
     )
+
+    # He & Kempe's scenario set: the two "all-low" / "all-high" corners of the
+    # per-edge interval [P_PLUS_RANGE[0], P_PLUS_RANGE[1]] that the true p_plus
+    # is actually drawn from -- i.e. robust_kempe is handed exactly the same
+    # RANGE information the experiment design already assumes is "publicly
+    # known" (it's a fixed constant of this study), never the realized p_plus
+    # itself. This is the fair, apples-to-apples counterpart to MF-BWI-Fair,
+    # which starts with no information beyond a flat Beta(1,1) prior and only
+    # learns the realized values via Bayesian updating over rounds.
+    edges = list(G.edges())
+    scenario_low = {e: P_PLUS_RANGE[0] for e in edges}
+    scenario_high = {e: P_PLUS_RANGE[1] for e in edges}
+    seeds_robust = robust_select(
+        G, [scenario_low, scenario_high], k=K,
+        gamma=ROBUST_KEMPE_GAMMA, num_sims=ROBUST_KEMPE_NUM_SIMS,
+        rng=np.random.default_rng(context_seed("robust_select", trial_seed)),
+    )
+
     return {
         "kkt_greedy": list(seeds_kkt),
         "fair_greedy": list(seeds_fair),
         "imm": list(seeds_imm),
+        "robust_kempe": list(seeds_robust),
     }
 
 
