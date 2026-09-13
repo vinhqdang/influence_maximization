@@ -285,17 +285,183 @@ the sandwich exploits.
 
 ---
 
-## 5. Lower bound for $\beta>0$ -- open
+## 5. Lower bound for $\beta>0$
 
-Does $\beta>0$ *strictly* worsen the achievable ratio, and is the sandwich
-ratio $\rho$ essentially tight? The natural attack is a gadget reduction from
-max-$k$-cover in which the optimum must *avoid* seeding high-degree nodes whose
-backfire damages other active nodes, so that "which nodes to avoid" encodes a
-hard problem and forces an unavoidable multiplicative loss $\propto\beta$. The
-difficulty is that an efficient algorithm may simply avoid the backfire nodes;
-the loss must be unavoidable for *every* efficient algorithm, not just greedy.
-This section is to be completed from the dedicated hardness investigation;
-until then the paper claims only 4.1-4.2 on the lower-bound side.
+**Setup for this section.** Rounds update synchronously from the *start-of-round*
+state (an inactive $v$'s activation and an active $v$'s survival are both
+evaluated against $A_t$, not against a partially-updated $A_{t+1}$); this
+convention is load-bearing for Lemma 5.2 below and is the one used throughout.
+Seeds are active at $t=0$; $q=0$ in this section unless stated.
+
+### 5.1 Inherited hardness, rigorously, including a subtlety
+
+**Theorem 5.1.** For every fixed $\beta\in[0,1)$, no polynomial-time algorithm
+approximates $f_\beta$ within $(1-1/e+\varepsilon)$ for any $\varepsilon>0$
+unless P=NP.
+
+*Proof.* Reduction from max-$k$-cover, $(1-1/e+\varepsilon)$-inapproximable
+unless P=NP (**Cited:** Feige, *JACM* 45(4), 1998, §5; the oracle-model version
+of the same bound is Nemhauser & Wolsey, *Math. Oper. Res.* 1978 -- both
+citations re-checked only for their headline statement, not re-verified
+hypothesis-by-hypothesis). Build a bipartite digraph (set-nodes $\to$
+element-nodes, $p=1$), each element replicated $M$ times to swamp the additive
+$kT$ seed-count term. The one subtlety: backfire *is* realized on this
+instance (a seed keeps attacking every element it covers), so it must be shown
+harmless, not merely absent. $\square$
+
+**Lemma 5.2 (exact value on layered/bipartite instances).** If element $v$ has
+$c_v(S)\ge1$ active covering seeds throughout, its activity is a two-state
+chain with up-rate $1$ and down-rate $1-(1-\beta)^{c_v(S)}$, giving
+$$f_\beta(S)\;=\;kT+T\sum_v \varphi_\beta\big(c_v(S)\big)+O(n),\qquad
+\varphi_\beta(c):=\frac{1}{2-(1-\beta)^{c}},\quad \varphi_\beta(0):=0.$$
+$\varphi_\beta$ is strictly decreasing in $c$ for $c\ge1$ with
+$\varphi_\beta(1)=1/(1+\beta)$ and $\varphi_\beta(c)\ge1/2$ for all $c\ge1$
+(verified against exact Markov-chain computation, $n\le$ a few hundred states,
+$T\sim300$-$400$: predicted vs. computed values agreed, e.g. $5.200$ vs.
+$5.202$ on a test instance). A YES (partition) instance thus scores
+$nT/(1+\beta)$; any $S$ scores at most
+$\mathrm{cover}(S)\cdot T/(1+\beta)+O(n)$ -- the max-coverage gap survives
+backfire intact, proving Theorem 5.1. $\blacksquare$
+
+This also shows $f_\beta\ge f_0/2$ **for every $S$** on this instance class,
+at $q=0$ -- where the sandwich bound of Theorem 2.3 gives $\rho=0$ (vacuous).
+Section 5.3 returns to this gap.
+
+### 5.2 Strict worsening: a conditional constant, and why nothing worse
+
+**Structural fact (why gadgets keep failing).** On every edge, in every round,
+$P(\text{$u$ activates }v\mid v\text{ inactive})=p(u,v)\ge\beta\,p(u,v)=
+P(\text{$u$ kills }v\mid v\text{ active})$. So a node with a persistently
+active in-neighbour is revived at least as fast as that neighbour kills it;
+Lemma 5.2 makes this rigorous on layered instances ($\varphi_\beta\ge1/2$).
+Backfire only becomes destructive through *synchronous mutual extinction* of a
+densely, symmetrically self-attacking set with no external reviver (a
+bidirected $K_6$, $p=1,\beta=0.5,q=0$: $f_\beta=0.019$ vs. $f_0=6$, a
+$300\times$ collapse). But this mechanism is **indiscriminate**: every seed
+choice on that substructure collapses equally, so it encodes no hidden
+combinatorial constraint an algorithm could get right or wrong. Concretely,
+three natural attempts to turn "who collapses" into a hard-to-decide property
+of $S$ all fail for the same underlying reason (the revive-$\ge$-kill
+asymmetry above, or the fact that $q$ is a global rather than a per-node
+lever): (i) conflict edges between candidate seeds -- the pair dies slowly but
+its covered elements mostly survive the death round; (ii) mortal elements via
+$q$ -- kills isolated "good" seeds too, indiscriminately; (iii) seeds revivable
+by their own elements -- yields an oscillator whose collapse rate is
+$\beta^{|\text{set}|}$ regardless of which conflicts are present. No gadget
+built this way forces a loss that depends on which poly-time algorithm is run.
+
+**Proposition 5.3 (conditional).** Suppose Feige's NO-instances additionally
+satisfy: for every candidate $k$-subset $S$, the number of elements covered
+*exactly once* is at most $(1/e+\varepsilon)n$. Then no poly-time algorithm
+achieves ratio $c(\beta)(1-1/e)+\varepsilon'$, where
+$$c(\beta)(1-1/e)\;=\;\frac1e+\Big(1-\frac2e\Big)\frac{\varphi_\beta(2)}{\varphi_\beta(1)}
+\;=\;(1-1/e)\;-\;\Big(1-\frac2e\Big)\frac{\beta(1-\beta)}{1+2\beta-\beta^2}.$$
+Numerically $c(\beta)\approx0.968,\,0.946,\,0.939,\,0.940,\,0.960,\,0.981$ at
+$\beta=0.1,0.25,0.4,0.5,0.75,0.9$ -- worst near $\beta\approx0.45$, vanishing
+at both ends. *Proof sketch:* bound the NO value by
+$\varphi_\beta(1)\cdot U+\varphi_\beta(2)\cdot(C-U)$ with $U$ the
+once-covered count and $C\le(1-1/e+\varepsilon)n$ the total cover, maximized at
+the stated boundary; compare to the YES value $n\varphi_\beta(1)$.
+
+**Status: not a theorem.** The extra property is *not* part of Feige's stated
+result, though it is plausible from his construction (a probabilistic-method
+partition-system argument: Chernoff plus union bound gives, for any fixed
+additive statistic over a random partition, concentration around its
+expectation under $\mathrm{Bin}(d,1/k)$ overlaps -- in particular for the
+"covered exactly once" statistic, which concentrates near $n/e$ at $d=k$).
+Two gaps remain before this is a proof: (i) Feige's block-averaging step uses
+concavity of $d\mapsto1-(1-1/k)^d$; the analogous step here needs concavity of
+$d\mapsto\mathbb E\,\varphi_\beta(\mathrm{Bin}(d,1/k))$, unchecked (a concave
+envelope would still work but weaken the constant); (ii) cross-terms from two
+sets in the same partition class need the reduction's pairwise-soundness
+property re-verified for this statistic, not just for coverage. Best current
+description: **very likely true, not yet proven.**
+
+### 5.3 Is the sandwich bound $\rho$ tight? No -- it is loose, and sometimes vacuous
+
+Exact computation on small instances (2-8 nodes, $T\sim300$):
+
+| instance | $q$ | $\rho$ | $f_\beta(S^\star)/f_0(S^\star)$ | greedy-on-$f_0$ / $\mathrm{OPT}_\beta$ |
+|---|---|---|---|---|
+| directed star, 6 leaves, $\beta=0.5$ | 0 | 0 (vacuous) | 0.715 | 1.000 |
+| directed star | 0.05 | 0.091 | 0.723 | 1.000 |
+| directed star | 0.2 | 0.286 | 0.801 | 1.000 |
+| two $K_4$ + bridge, $p=0.3,k=2$ | 0.05 | 0.077 | 0.441 | 1.000 |
+| bidirected $K_6$, $p=1,\beta=0.5$ | 0.05 | 0.020 | 0.004 | 1.000 |
+| 8 random digraphs, $k=2$, $\beta=0.5$ | 0/0.1 | 0-0.14 | 0.24-0.73 | 0.991-1.000 |
+
+Three conclusions, none of them a theorem, all informative for where to spend
+future effort:
+
+1. **The sandwich is loose by an order of magnitude** where it applies at all
+   (e.g. the lower surrogate $L$ underestimates the star instance's value by
+   $13\times$, because it inflates every node's recovery uniformly by $\delta_v$
+   even on nodes with no active in-neighbour left) **and vacuous whenever**
+   $q+\beta\Delta_{\mathrm{in}}\ge1$ (common) **or $q=0$** (always, since
+   $\rho=q/(q+\beta\Delta_{\mathrm{in}})=0$).
+2. **$f_\beta/f_0$ is not bounded below by any instance-independent constant**
+   (the $K_6$ row: $0.004$) -- so no *multiplicative* comparison against $f_0$,
+   sandwich or otherwise, can be the source of a strong general guarantee;
+   any tighter bound must compare against $\mathrm{OPT}_\beta$ directly, e.g.
+   via the exact layered formula (Lemma 5.2) on instances where it applies, or
+   a per-instance certificate as in Theorem 2.3's corollary.
+3. **Greedy run on the plain $f_0$ surrogate landed within 1% of $\mathrm{OPT}_\beta$
+   on every tested instance**, including ones where the sandwich bound is
+   vacuous or far off. This is six small instances, not a proof, but it is
+   suggestive evidence that the *practical* quality of surrogate-greedy is far
+   better than $\rho(1-1/e)$ certifies, and that a sharper analysis (not
+   necessarily a sharper algorithm) is the more promising next step before
+   trying to design something new.
+
+**Conjecture 2.5 revisited.** Given 5.3's findings, the steady-state guess
+$\rho\gtrsim q/(q+\beta\Delta_{\mathrm{in}})$ should be read as a provable but
+*weak* lower bound on the sandwich ratio, not as a target for a matching
+hardness result -- Proposition 5.3's constant $c(\beta)\ge0.94$ is far above
+$\rho$, and nothing found here suggests $\rho$ itself is the right quantity to
+try to match with a lower bound.
+
+### 5.4 Alternative framings
+
+**Why Horel & Singer's oracle bound does not bite (confirms Section 4.2's
+claim, does not follow from it).** Our $f_\beta$ is a *known* deterministic
+function of a *known* submodular surrogate $f_0$ -- an algorithm may simply
+query $f_0$. Horel & Singer's (NeurIPS 2016) exponential-query lower bound
+applies to an *adversarial*, planted perturbation designed to be
+indistinguishable from submodular under query access; ours is structured and
+transparent, so their bound does not apply here (this is a structural
+distinction, not a re-derivation of their theorem, which was not re-verified
+line-by-line here).
+
+**A more promising unconditional route (open).** The class
+$\{S\mapsto\sum_v\varphi(c_v(S))\}$ is closed under the same symmetrization
+used in Vondrák's symmetry-gap framework (**Cited**, *SIAM J. Comput.* 2013);
+the symmetric-instance gap for our $\varphi_\beta$ works out to
+$\mathbb E[\varphi_\beta(\mathrm{Poisson}(1))]/\varphi_\beta(1)$, numerically
+$0.589$ at $\beta=0.5$ -- close to, and slightly below, Proposition 5.3's
+$0.594$. *If* the symmetry-gap theorem's proof (which uses submodularity in
+its smoothing/interpolation step) extends to this specific non-submodular but
+structured class, this would give an **unconditional** oracle-model lower
+bound matching Proposition 5.3 without needing the unverified property (P).
+Whether the smoothing step survives is open and was not checked here; it is
+the single most promising next step for turning Section 5.2 into a proof.
+
+### 5.5 Bottom line for this section
+
+$(1-1/e)$-hardness is inherited **rigorously** (Theorem 5.1). A strict,
+$\beta$-dependent worsening by a modest constant ($c(\beta)\ge0.94$ across all
+tested $\beta$) is reduced to one plausible, precisely-stated, unverified
+property of Feige's construction (Proposition 5.3) -- this is the concrete
+target for turning "very likely true" into a theorem. Structural evidence
+(the per-edge revive-$\ge$-kill asymmetry, and every gadget attempt failing
+for the same reason) suggests **no super-constant worsening is achievable for
+fixed $\beta$**, and separately, the sandwich ratio $\rho$ from Section 2 is
+**not** a natural target for a matching lower bound -- it is empirically loose
+by up to an order of magnitude and often vacuous, while greedy-on-$f_0$
+performed near-optimally on every small instance tested. The practical
+takeaway: effort is better spent sharpening the *upper* bound (a per-instance
+or instance-class analysis beating Theorem 2.3, in the spirit of Lemma 5.2)
+than searching for a stronger lower bound, which the evidence here says
+likely does not exist for fixed $\beta$.
 
 ---
 
@@ -312,4 +478,7 @@ until then the paper claims only 4.1-4.2 on the lower-bound side.
 | Prop. 3.3 | proof sketch + numerical check | indexability for the 2-state/3-action case |
 | Theorem 3.4 | proven | $O(Km+n\log n)$ per round |
 | 4.1-4.2 | cited | $1-1/e$ ceiling for every $\beta$; no general constant factor without structure |
-| Section 5 | open | strict worsening / tightness of $\rho$ |
+| Thm 5.1, Lem 5.2 | proven | $(1-1/e)$-hardness survives backfire exactly; layered instances have $f_\beta\ge f_0/2$ |
+| Prop 5.3 | conditional (very likely true, not proven) | strict worsening by $c(\beta)\ge0.94$, given one unverified property of Feige's construction |
+| Sec 5.3 finding | empirical (6 instances) | sandwich $\rho$ loose by up to $13\times$, vacuous at $q=0$; greedy-on-$f_0$ within 1% of $\mathrm{OPT}_\beta$ throughout |
+| Sec 5.4 | open | symmetry-gap route to an unconditional match of Prop 5.3, contingent on extending Vondrák's smoothing step |
