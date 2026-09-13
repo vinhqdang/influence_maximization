@@ -419,3 +419,51 @@ crossover, but the same crossover, not a reversal.
 procedure) without changing the empirical story this project is built on.
 That is the outcome you want from a "fix a bug, re-verify" pass -- a result
 that survives closer scrutiny, not one that depended on the bug.
+
+## Update: adding IMM, a real published baseline (not in-house)
+
+Every baseline up to this point except the objective forms they target
+(kkt_greedy, fair_greedy, repeated_greedy) was written for this project, not
+reproduced from a paper's own code. `im_lab/baselines/imm.py` adds IMM (Tang,
+Shi & Xiao, SIGMOD 2015) -- the standard, most-cited near-linear-time
+(1-1/e-epsilon)-approximate algorithm for classical influence maximization --
+as a genuinely published, citable point of comparison, computed once per
+trial alongside kkt_greedy/fair_greedy and run through the same sequential
+simulator.
+
+**Result: IMM tracks kkt_greedy/fair_greedy closely throughout** (beta=0:
+78.0 vs. 75.7/76.9; beta=0.7: 52.5 vs. 51.9/51.9; q=0.4: 15.4 vs. 12.9/12.9),
+sometimes a touch ahead, never dramatically different. This is exactly what
+should happen and is not a disappointing result: IMM targets the identical
+classical objective as kkt_greedy (plain progressive-IC spread, no
+backfire/recovery/fairness/uncertainty awareness), so it degrades the same
+way once those are present -- the whole point of including it is that it is
+a *named, published* algorithm behaving as expected, not a different
+qualitative competitor. MF-BWI-Fair's lead over all three one-shot baselines
+(now including IMM) is unchanged in kind: roughly tied at beta=q=0 with the
+sequential baselines (see above), and a growing multiple of every one-shot
+baseline -- IMM included -- as soon as backfire or recovery departs from
+zero (e.g. q=0.4: MF-BWI-Fair 96.8 vs. IMM's 15.4, more than 6x).
+
+A second published, non-learning baseline was also added for a different
+reason: `im_lab/baselines/robust_kempe.py` implements He & Kempe's Saturate
+Greedy (KDD 2016) for robust IM under uncertain edge probabilities -- the one
+axis IMM does not touch at all. It is not wired into this sweep-based
+comparison (it is a bicriteria algorithm returning a variable-size seed set
+under a *scenario set* rather than a single k-sized set under a single true
+p_plus, so it does not fit this script's per-round-budget framing without
+a separate, dedicated comparison); see its own module docstring and tests
+for its validated bicriteria guarantee and a concrete demonstration that
+plain single-scenario greedy can be arbitrarily bad where Saturate Greedy is
+not. It is documented here as evidence the project compares against real,
+non-learning, published algorithms on more than one axis, not only the
+classical progressive-IC objective IMM and kkt_greedy target.
+
+**Honest scope note.** No comparison in this project runs against the
+original authors' own code for any cited paper -- every baseline (repeated
+greedy aside) is a from-scratch, independently-verified reimplementation,
+cross-checked here against the papers' own stated theorems/algorithms and,
+where possible, against independent Monte Carlo evaluation rather than each
+algorithm's own internal estimate. That is a meaningfully different (weaker)
+claim than "reproduces the original authors' reported numbers," and should
+be stated as such in the paper.
