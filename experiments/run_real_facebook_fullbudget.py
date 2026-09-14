@@ -23,15 +23,33 @@ clearly separate directory (results_multigraph/real_facebook_348_fullbudget/)
 so the original reduced-budget run's results are left untouched for the
 before/after comparison.
 
+CHECKPOINTED / RESUMABLE: this run's total cost (3 sweeps x 15 trials each,
+full-budget num_sims) is estimated at many hours, and this execution
+environment's containers are NOT guaranteed to survive that long unattended
+(a container can be reclaimed/restarted with no warning, silently killing a
+plain background process -- this happened to the first attempt at this run).
+So instead of computing each sweep in one in-memory pass and writing its CSV
+only at the end, this script processes ONE TRIAL AT A TIME, appends that
+trial's rows to the sweep's CSV immediately, and records the trial as done
+in a checkpoint file. Re-running this exact command (same argv, same output
+dir) after a restart skips whatever trials the checkpoint already has and
+resumes -- all seeding is deterministic per (config.name, sweep, trial) via
+context_seed, so a resumed run produces byte-identical rows to an
+uninterrupted one. Worst case lost work from a mid-trial container death is
+one trial's compute, not the whole run.
+
 Run with: python experiments/run_real_facebook_fullbudget.py
 (expected runtime: potentially several hours at this graph's density --
 run as a background process, e.g.
   nohup python experiments/run_real_facebook_fullbudget.py > /tmp/real_facebook_fullbudget.log 2>&1 &
-matching the pattern used elsewhere in this project.)
+matching the pattern used elsewhere in this project. Safe to re-invoke the
+same command at any time to resume from the last completed trial.)
 """
 
 from __future__ import annotations
 
+import csv
+import json
 import os
 import time
 
@@ -40,6 +58,7 @@ from im_lab import graphs
 from run_multigraph_validation import ALGO_COLORS, ALGO_LABELS, build_real_facebook_348, plot_sweep
 
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results_multigraph", "real_facebook_348_fullbudget")
+CHECKPOINT_PATH = os.path.join(RESULTS_DIR, "checkpoint.json")
 
 # Exactly experiments/common.py's main-study constants (see that module) --
 # T=30, B=100, K=20, N_TRIALS=15, CELF_NUM_SIMS=40, FAIR_NUM_SIMS=20,
@@ -81,6 +100,60 @@ CONFIG = MC.GraphConfig(
 )
 
 
+def _load_checkpoint():
+    if os.path.exists(CHECKPOINT_PATH):
+        with open(CHECKPOINT_PATH) as f:
+            return json.load(f)
+    return {"beta": [], "q": [], "alpha": []}
+
+
+def _save_checkpoint(ckpt):
+    tmp = CHECKPOINT_PATH + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(ckpt, f)
+    os.replace(tmp, CHECKPOINT_PATH)
+
+
+def _append_rows(rows, path):
+    if not rows:
+        return
+    file_exists = os.path.exists(path)
+    fieldnames = list(rows[0].keys())
+    with open(path, "a", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        if not file_exists:
+            writer.writeheader()
+        writer.writerows(rows)
+
+
+def _read_rows(path):
+    if not os.path.exists(path):
+        return []
+    with open(path, newline="") as f:
+        reader = csv.DictReader(f)
+        rows = []
+        for r in reader:
+            r["trial"] = int(r["trial"])
+            r["time_avg_spread"] = float(r["time_avg_spread"])
+            r["min_group_reach"] = float(r["min_group_reach"])
+            r["runtime_s"] = float(r["runtime_s"])
+            rows.append(r)
+        return rows
+
+
+def _run_sweep_resumable(sweep_name, csv_path, trial_fn, ckpt, t_start):
+    done = set(ckpt[sweep_name])
+    for trial in range(CONFIG.N_TRIALS):
+        if trial in done:
+            continue
+        rows = trial_fn(trial)
+        _append_rows(rows, csv_path)
+        ckpt[sweep_name].append(trial)
+        _save_checkpoint(ckpt)
+        print(f"  {sweep_name} trial {trial + 1}/{CONFIG.N_TRIALS} done at {time.time() - t_start:.1f}s", flush=True)
+    return _read_rows(csv_path)
+
+
 def run():
     out_dir = RESULTS_DIR
     os.makedirs(out_dir, exist_ok=True)
@@ -90,45 +163,59 @@ def run():
     group_sizes = graphs.group_sizes(G)
     print(f"=== {CONFIG.name} === nodes={G.number_of_nodes()} edges={G.number_of_edges()} groups={group_sizes}", flush=True)
 
+    ckpt = _load_checkpoint()
     t_start = time.time()
 
-    beta_rows = MC.run_beta_or_q_sweep(
-        CONFIG, "beta", CONFIG.BETA_VALUES,
-        true_beta_of=lambda v: v,
-        q_range_of=lambda v: (CONFIG.BETA_SWEEP_Q, CONFIG.BETA_SWEEP_Q),
-        alpha_fair=CONFIG.DEFAULT_ALPHA_FAIR,
-        G=G, group_of=group_of, group_sizes=group_sizes,
+    beta_path = os.path.join(out_dir, "beta_sweep.csv")
+    beta_rows = _run_sweep_resumable(
+        "beta", beta_path,
+        lambda trial: MC.run_beta_or_q_sweep_trial(
+            CONFIG, "beta", CONFIG.BETA_VALUES,
+            true_beta_of=lambda v: v,
+            q_range_of=lambda v: (CONFIG.BETA_SWEEP_Q, CONFIG.BETA_SWEEP_Q),
+            alpha_fair=CONFIG.DEFAULT_ALPHA_FAIR,
+            G=G, group_of=group_of, group_sizes=group_sizes, trial=trial,
+        ),
+        ckpt, t_start,
     )
-    MC.write_csv(beta_rows, os.path.join(out_dir, "beta_sweep.csv"))
     beta_summary, beta_values = MC.summarize(beta_rows, MC.ALGOS)
     plot_sweep(beta_summary, beta_values, MC.ALGOS, f"Backfire intensity beta (q={CONFIG.BETA_SWEEP_Q})",
                f"{CONFIG.name}: spread vs. beta", os.path.join(out_dir, "beta_sweep.png"))
-    print(f"  beta sweep done at {time.time()-t_start:.1f}s", flush=True)
+    print(f"  beta sweep done at {time.time() - t_start:.1f}s", flush=True)
 
-    q_rows = MC.run_beta_or_q_sweep(
-        CONFIG, "q", CONFIG.Q_VALUES,
-        true_beta_of=lambda v: CONFIG.Q_SWEEP_BETA,
-        q_range_of=lambda v: (v, v),
-        alpha_fair=CONFIG.DEFAULT_ALPHA_FAIR,
-        G=G, group_of=group_of, group_sizes=group_sizes,
+    q_path = os.path.join(out_dir, "q_sweep.csv")
+    q_rows = _run_sweep_resumable(
+        "q", q_path,
+        lambda trial: MC.run_beta_or_q_sweep_trial(
+            CONFIG, "q", CONFIG.Q_VALUES,
+            true_beta_of=lambda v: CONFIG.Q_SWEEP_BETA,
+            q_range_of=lambda v: (v, v),
+            alpha_fair=CONFIG.DEFAULT_ALPHA_FAIR,
+            G=G, group_of=group_of, group_sizes=group_sizes, trial=trial,
+        ),
+        ckpt, t_start,
     )
-    MC.write_csv(q_rows, os.path.join(out_dir, "q_sweep.csv"))
     q_summary, q_values = MC.summarize(q_rows, MC.ALGOS)
     plot_sweep(q_summary, q_values, MC.ALGOS, f"Recovery rate q (beta={CONFIG.Q_SWEEP_BETA})",
                f"{CONFIG.name}: spread vs. q", os.path.join(out_dir, "q_sweep.png"))
-    print(f"  q sweep done at {time.time()-t_start:.1f}s", flush=True)
+    print(f"  q sweep done at {time.time() - t_start:.1f}s", flush=True)
 
-    alpha_rows = MC.run_alpha_sweep(CONFIG, G, group_of, group_sizes)
-    MC.write_csv(alpha_rows, os.path.join(out_dir, "alpha_sweep.csv"))
+    alpha_path = os.path.join(out_dir, "alpha_sweep.csv")
+    alpha_rows = _run_sweep_resumable(
+        "alpha", alpha_path,
+        lambda trial: MC.run_alpha_sweep_trial(CONFIG, G, group_of, group_sizes, trial),
+        ckpt, t_start,
+    )
     alpha_summary, alpha_values = MC.summarize(alpha_rows, MC.ALGOS)
     plot_sweep(alpha_summary, alpha_values, MC.ALGOS, "Fairness parameter alpha_fair",
                f"{CONFIG.name}: spread vs. alpha_fair", os.path.join(out_dir, "alpha_sweep.png"))
     plot_sweep(alpha_summary, alpha_values, MC.ALGOS, "Fairness parameter alpha_fair",
                f"{CONFIG.name}: min-group reach vs. alpha_fair", os.path.join(out_dir, "alpha_sweep_fairness.png"),
                y_key="mean_min_reach", std_key="std_min_reach", ylabel="Min group reach fraction")
-    print(f"  alpha sweep done at {time.time()-t_start:.1f}s total", flush=True)
+    print(f"  alpha sweep done at {time.time() - t_start:.1f}s total", flush=True)
 
-    print(f"TOTAL runtime: {time.time()-t_start:.1f}s", flush=True)
+    print(f"TOTAL runtime: {time.time() - t_start:.1f}s", flush=True)
+    print("DONE", flush=True)
     return {
         "graph": {"n": G.number_of_nodes(), "m": G.number_of_edges(), "group_sizes": group_sizes},
         "beta": (beta_summary, beta_values),
