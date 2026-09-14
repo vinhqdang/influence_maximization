@@ -1,0 +1,863 @@
+\documentclass[journal]{IEEEtran}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{url}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{proposition}{Proposition}
+\newtheorem{corollary}{Corollary}
+\newtheorem{conjecture}{Conjecture}
+
+\newcommand{\eqdef}{:=}
+
+\begin{document}
+
+\title{Fair, Non-Progressive Influence Control Under Backfire and Parameter Uncertainty}
+
+\author{Quang-Vinh~Dang
+\thanks{Q.-V. Dang is with the British University Vietnam, Hung Yen, Vietnam (e-mail: vinh.dq4@buv.edu.vn).}}
+
+\markboth{IEEE Transactions on Computational Social Systems}{}
+
+\maketitle
+
+\begin{abstract}
+The classical influence maximization guarantee of Kempe, Kleinberg, and Tardos
+rests on four assumptions: progressive diffusion, a monotone submodular
+objective, known influence parameters, and no fairness requirement. Real
+deployments routinely violate all four at once: influence decays and can be
+actively reversed (backfire, or negative word-of-mouth), edge probabilities
+are never known exactly, and social interventions must not neglect a
+disadvantaged subpopulation. This paper studies the combined relaxation. We
+prove that a sandwich approximation built from two monotone-submodular
+surrogates yields a $\rho(1-1/e)$ guarantee for \emph{every} backfire
+intensity $\beta \in [0,1)$, degenerating gracefully to the tight $1-1/e$
+bound at $\beta=0$ and admitting a per-instance, directly computable
+certificate. We derive a closed-form Lagrangian index for the resulting
+2-state/3-action per-node control problem, replacing a bisection-plus-value-iteration
+inner loop with an $O(Km+n\log n)$-per-round procedure that we measure to be
+roughly two orders of magnitude faster than the bisection oracle it replaces.
+We show that $(1-1/e)$-hardness survives backfire exactly, and we state --
+without overclaiming -- a conditional, not-yet-proven result suggesting a
+further constant-factor worsening for a plausible but unverified property of
+Feige's hard instances. Finally, we identify and correct a population-weighting
+pathology in an existing isoelastic-welfare fairness objective that
+systematically under-protects small groups, and replace it with an
+egalitarian reweighting. We implement all of this in a control policy,
+MF-BWI-Fair, that combines mean-field belief propagation, Bayesian parameter
+tracking, the closed-form index, and the corrected fairness reweighting.
+Preliminary experiments on a synthetic stochastic block model benchmark
+show MF-BWI-Fair sustaining spread under backfire and recovery where
+one-shot baselines -- including independently reimplemented published
+algorithms (IMM, He--Kempe's robust Saturate Greedy) -- degrade sharply, and
+show the egalitarian fix raising worst-off-group reach at negligible spread
+cost. A full multi-graph validation and a benchmark against the original
+IMM implementation are in progress and are not reported here.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Influence maximization, submodular optimization, restless bandits, fairness,
+robust optimization, social networks.
+\end{IEEEkeywords}
+
+\section{Introduction}
+
+Kempe, Kleinberg, and Tardos~\cite{kempe2003maximizing} showed that under the
+Independent Cascade (IC) and Linear Threshold (LT) models, the expected spread
+of a seed set is monotone and submodular, so the greedy algorithm achieves a
+$(1-1/e)$-approximation via the general result of Nemhauser, Wolsey, and
+Fisher~\cite{nemhauser1978analysis}, and this ratio is tight under standard
+complexity assumptions~\cite{feige1998threshold}. That guarantee, and the
+large body of scalable algorithms it spawned -- CELF's lazy-forward
+speedup~\cite{leskovec2007cost} and the near-linear-time RIS/martingale
+algorithm IMM~\cite{tang2015influence,borgs2014maximizing} chief among them --
+rests on four assumptions taken together: (A1) diffusion is
+\emph{progressive} (once active, always active); (A2) the spread function is
+\emph{monotone submodular}; (A3) influence parameters are \emph{known}
+exactly; and (A4) the objective has \emph{no fairness structure} -- every
+node's activation counts equally toward one aggregate number.
+
+Each assumption is routinely false in the settings influence maximization is
+used to model. Interventions decay: a vaccinated or informed individual can
+relapse or forget, and messaging campaigns require sustained reinforcement,
+not a one-time seeding. Influence can be actively \emph{negative}: word of
+mouth can backfire, and an over-exposed contact can turn an active neighbor
+against the message rather than merely fail to convert
+it~\cite{chen2011influence,he2012influence,li2014influence}. Edge
+probabilities are estimated from noisy or incomplete cascade data, never
+known exactly. And in the social-intervention settings that motivate much of
+this work in the first place -- HIV-prevention and stable-housing
+information campaigns among homeless youth, the application context
+Rahmattalabi et al.\ build their fairness-aware
+formulation around~\cite{rahmattalabi2021fair} -- treating every node as
+interchangeable is not a simplification but a policy failure: a mechanism
+that maximizes aggregate reach while systematically under-serving one
+subpopulation is not simply "unfair" in the abstract, it directly
+undermines the deployment's stated public-health goal.
+
+Prior work has relaxed these assumptions one, or occasionally two, at a
+time (Section~\ref{sec:related}). This paper studies all four relaxations
+\emph{together}: a model with recovery and backfire-driven deactivation
+(relaxing A1 and, as we show, A2), Bayesian tracking of unknown influence
+and recovery parameters (relaxing A3), and an egalitarian-welfare
+fairness objective over groups (relaxing A4). Our literature search found no
+existing paper that combines all four axes; the two closest works each
+combine exactly two (Section~\ref{sec:related}).
+
+\subsection*{Contributions}
+\begin{itemize}
+\item \textbf{A formal layered-semantics model} (Section~\ref{sec:model})
+  in which an active node survives a round unless it spontaneously recovers
+  or is backfired by an active in-neighbor, and any node -- active or not --
+  can be (re-)activated by a successful positive trial from an active
+  in-neighbor.
+\item \textbf{A proven submodularity result for recovery alone}
+  (Lemma~\ref{lem:recovery-submodular}): spontaneous, state-independent
+  recovery preserves monotone submodularity of cumulative spread on any
+  graph, via a layered live-edge-graph reachability argument. This isolates
+  recovery as the "free" relaxation; neighbor-dependent backfire is what
+  destroys the coverage structure.
+\item \textbf{A sandwich approximation theorem} (Theorem~\ref{thm:sandwich},
+  \emph{proven}, instantiating the general sandwich technique
+  of~\cite{lu2015competition} together with~\cite{nemhauser1978analysis}):
+  for \emph{every} backfire intensity $\beta \in [0,1)$, a greedy solution
+  taken over two monotone-submodular surrogates and the raw objective
+  achieves $\rho(1-1/e)\,\mathrm{OPT}_\beta$, where $\rho$ is an
+  instance-dependent sandwich ratio that degenerates to the tight $1-1/e$
+  bound at $\beta=0$. The guarantee is also directly instance-certifiable:
+  a returned set ships its own approximation ratio, computable by simulating
+  the two $\beta=0$ surrogates.
+\item \textbf{A closed-form Lagrangian index} (Propositions~\ref{prop:closedform}--\ref{prop:indexability},
+  Theorem~\ref{thm:complexity}, \emph{proven} except for indexability itself,
+  which is checked numerically and explicitly flagged as such) for the
+  resulting 2-state/3-action per-node control problem, reducing the
+  per-round decision from bisection with per-node value iteration to
+  $O(Km+n\log n)$ -- an approximately $130\times$ speedup measured in this
+  project's implementation.
+\item \textbf{Hardness results that preserve honest status labels}:
+  Theorem~\ref{thm:hardness} \emph{proves} that $(1-1/e)$-inapproximability
+  survives backfire exactly, for every fixed $\beta$; Proposition~\ref{prop:conditional}
+  is stated and discussed as a \emph{conditional, unproven} result --
+  consistent with its labeling in the underlying project notes -- suggesting
+  (not proving) a further constant-factor worsening contingent on one
+  plausible but unverified property of Feige's hard-instance construction.
+\item \textbf{A corrected fairness mechanism}: we identify a measured
+  population-weighting pathology in the isoelastic welfare objective
+  of~\cite{rahmattalabi2021fair} (small groups are protected only once
+  under-served by a factor proportional to a group-size ratio) and replace
+  it with an egalitarian (population-unweighted) reweighting that protects
+  the worst-off group at a neutral default setting.
+\item \textbf{MF-BWI-Fair}, a control policy combining mean-field belief
+  propagation, Bayesian posterior tracking, the closed-form Lagrangian
+  index, and the corrected welfare reweighting, together with a preliminary
+  comparison against six algorithms including independently-verified
+  reimplementations of two published baselines.
+\end{itemize}
+
+\section{Related Work}
+\label{sec:related}
+
+\subsection{Classical influence maximization}
+Kempe, Kleinberg, and Tardos~\cite{kempe2003maximizing} established
+monotone submodularity of expected spread under IC/LT and the resulting
+$(1-1/e)$ greedy guarantee~\cite{nemhauser1978analysis}, tight under
+$\mathrm{P}\ne\mathrm{NP}$~\cite{feige1998threshold}. CELF~\cite{leskovec2007cost}
+gives a lazy-forward speedup exploiting the same submodularity. IMM~\cite{tang2015influence},
+building on the RIS/reverse-reachable-set duality of~\cite{borgs2014maximizing},
+gives an $O((k+\ell)(n+m)\log n/\varepsilon^2)$ near-linear-time
+$(1-1/e-\varepsilon)$-approximation and is, to our knowledge, the most-cited
+scalable classical algorithm with publicly available original
+code~\cite{chen2018issue}.
+
+\subsection{Fair / group-fairness-constrained influence maximization}
+Tsang et al.~\cite{tsang2019group} introduce maximin and diversity-constraint
+fairness notions as a multi-objective submodular problem. Fish et
+al.~\cite{fish2019gaps} study a maximin welfare objective directly and prove
+it is not monotone submodular in general. Farnadi et
+al.~\cite{farnadi2020unifying} unify several fairness notions as exact MILP
+formulations at small scale, with no submodular approximation guarantee.
+Becker et al.~\cite{becker2021fairness} show deterministic maximin-fair
+seeding is hard to approximate but that randomized seeding recovers a
+$(1-1/e-\varepsilon)$-type guarantee. Rahmattalabi et
+al.~\cite{rahmattalabi2021fair} propose an isoelastic (CES) welfare objective
+over per-group reach and prove monotone submodularity via the
+concave-nondecreasing-composed-with-monotone-submodular lemma
+of~\cite{lin2011class}, giving an exact $(1-1/e)$ guarantee -- but only for
+the classical progressive IC model; their proof does not address
+deactivation or negative influence. This paper adopts their objective
+\emph{form}, not their guarantee, and additionally corrects a
+population-weighting side effect of their exact formula (Section~\ref{sec:fairness-fix}).
+Rui et al.~\cite{rui2023scalable} and Feng et al.~\cite{feng2023influence}
+extend fairness to scalable and data-driven/learning-based settings,
+respectively; the latter is out of scope for the classical-algorithms focus
+here.
+
+\subsection{Non-progressive / recovery-capable influence maximization}
+Chan and Ning~\cite{chan2015influence} show that non-progressive dynamics
+under the LT model lose submodularity on general graphs, recovering it only
+on DAGs. Golnari et al.~\cite{golnari2014revisiting} propose the "Heat
+Conduction" model, proving submodularity under a specially engineered
+non-progressive rule. Lou et al.~\cite{lou2014modeling} give a continuous-time
+two-state Markov estimation model without a submodularity result. Zahoor et
+al.~\cite{zahoor2024influence} and Hui et al.~\cite{hui2024nonprogressive}
+study reactivation dynamics, the latter via deep reinforcement learning
+(out of scope here). Tan{\i}nm{\i}s et al.~\cite{taninmis2019influence} study
+an adversarial deactivation game, a different framing from the spontaneous,
+non-adversarial backfire studied here. Our Lemma~\ref{lem:recovery-submodular}
+gives a stronger/different result than Chan and Ning's DAG-restricted
+finding: spontaneous, state-independent recovery alone preserves monotone
+submodularity on \emph{any} graph, via layered-DAG reachability rather than
+threshold-rule structure.
+
+\subsection{Non-monotone / non-submodular / negative-influence models}
+Bharathi et al.~\cite{bharathi2007competitive} give the first competitive
+cascade model. Chen et al.~\cite{chen2011influence} extend IC with a quality
+factor allowing activated nodes to flip negative, engineered to remain
+submodular. He et al.~\cite{he2012influence} introduce a two-competing-cascade
+"sandwich approximation" as a scalability device, whose general form is due
+to Lu, Chen, and Lakshmanan~\cite{lu2015competition}; our
+Theorem~\ref{thm:sandwich} instantiates the latter's general
+monotone-submodular bracket $L\le f\le U$, applied to a materially different
+bracket -- a recovery-only process, not a two-cascade one. Li et
+al.~\cite{li2014influence} give a signed-network model (IC-P) that also
+remains submodular by construction. Buchbinder et
+al.~\cite{buchbinder2015tight} and Tukan et al.~\cite{tukan2024practical} give
+tight and practical constant-factor guarantees for unconstrained/cardinality-constrained
+\emph{non-monotone submodular} maximization -- a different relaxation
+axis (non-monotonicity of a still-submodular function) from ours. Bian et
+al.~\cite{bian2017guarantees} give a submodularity-ratio/curvature-based
+greedy guarantee for non-submodular functions, superseded here by the
+sandwich approach, which holds for all $\beta$ rather than requiring an
+estimated ratio. Horel and Singer~\cite{horel2016maximization} give an
+exponential query-complexity lower bound for functions
+$\varepsilon$-far from submodular once $\varepsilon=\omega(n^{-1/2})$, but
+only for an \emph{adversarial} perturbation; our backfire perturbation is
+structured (a bounded extra kill rate), which is why Theorem~\ref{thm:sandwich}
+escapes this limitation (Section~\ref{sec:hardness}).
+
+\subsection{Bayesian, robust, and online influence maximization under uncertainty}
+He and Kempe~\cite{he2016robust} formalize worst-case-across-scenarios robust
+influence maximization and give a bicriteria Saturate Greedy algorithm with a
+provable budget-blowup/quality trade-off; no official code is available for
+this specific paper. The dominant paradigm for online uncertainty is
+combinatorial-bandit learning~\cite{vaswani2015influence,wen2017online,lei2015online,vaswani2017modelindependent,chen2013combinatorial,chen2016combinatorial}
+or one-shot distributionally robust
+optimization~\cite{chen2020correlation,staib2019distributionally}. A
+genuinely single-shot Bayesian formulation -- integrating expected spread
+over a prior without adaptivity or worst-case hedging -- exists only
+embedded inside bandit posterior-update machinery, not as a standalone
+anchor result; this is the gap our Bayesian tracker sits in.
+
+\subsection{Restless-bandit sequential control}
+Mate et al.~\cite{mate2020collapsing} give binary-action Whittle-index
+results for collapsing bandits, explicitly leaving multi-action indexability
+future work. Killian, Perrault, and Tambe~\cite{killian2021beyond} give the
+Lagrangian-relaxation template for general multi-action restless bandits that
+our closed-form index specializes and simplifies for the specific 2-state/3-action
+case, avoiding the general indexability problem they call "notoriously
+difficult." Ou et al.~\cite{ou2022networked} propose an alternative to
+mean-field network coupling that we verified does not apply here: their
+coupling is through a deterministic, known action-vector, not through
+another arm's actual random state, which is the genuinely bilinear coupling
+our setting requires. Li and Varakantham~\cite{li2022efficient} study
+fairness constraints in independent-arm restless bandits, confirming
+fairness-in-RMAB as an active but separate line of work.
+
+\subsection{Positioning}
+No paper we found combines group fairness, non-progressive/recovery
+dynamics, non-monotone backfire influence, and Bayesian parameter
+uncertainty. The two closest works each combine exactly two of these four
+axes, both very recent: a 2026 PACMMOD paper combining robust fairness with
+multiple-community-partition (parameter) uncertainty~\cite{robustfair2026pacmmod},
+and Fang et al.'s 2026 scalable fair influence \emph{blocking} maximization,
+combining fairness with non-monotone/blocking-style negative
+influence~\cite{fang2026scalable}. Separately, no paper we found connects
+submodular/RIS-style influence-maximization theory to restless-bandit
+sequential control theory at all; Section~\ref{sec:index} is, to the depth
+of our search, the first to do so for a node-level activation/maintenance
+control problem.
+
+\section{Problem Formulation}
+\label{sec:model}
+
+Let $G=(V,E)$ be a directed graph, $n=|V|$, $m=|E|$, with a partition of $V$
+into groups $G_1,\dots,G_M$. Rounds are $t=0,1,\dots,T$; the active set
+$A_t\subseteq V$ starts at $A_0=S$, the seed set. Each round draws
+independent randomness: for every edge $(u,v)$, a positive trial
+$X^t_{uv}\sim\mathrm{Bern}(p_{uv})$ and a backfire trial
+$Y^t_{uv}\sim\mathrm{Bern}(\beta p_{uv})$, for a global backfire intensity
+$\beta\in[0,1)$; for every node $v$, a recovery trial
+$R^t_v\sim\mathrm{Bern}(q_v)$.
+
+\textbf{Transition (layered semantics).} $v\in A_{t+1}$ iff
+\begin{equation}
+\begin{split}
+\big[\,v\in A_t \wedge R^t_v=0 \wedge \forall u\in A_t\cap N_{\mathrm{in}}(v): Y^t_{uv}=0\,\big]\\
+\vee\ \big[\,\exists u\in A_t\cap N_{\mathrm{in}}(v): X^t_{uv}=1\,\big].
+\end{split}
+\end{equation}
+An active node stays active unless it recovers or is backfired by an active
+in-neighbor, and any node -- active or not -- is (re-)activated by a
+successful positive trial from an active in-neighbor; in particular a
+positive trial can \emph{rescue} an active node in the same round it would
+otherwise have recovered or been backfired. This rescue clause is exactly
+what makes the one-step map $A_t\mapsto A_{t+1}$ monotone in $A_t$ at
+$\beta=0$, which the submodularity result of Section~\ref{sec:theory}
+rests on; for $\beta>0$ the map is not monotone, since the backfire clause
+is anti-monotone.
+
+The objective is cumulative expected spread,
+\begin{equation}
+f_\beta(S) \;=\; \mathbb{E}\Big[\sum_{t=1}^T |A_t|\Big], \qquad A_0=S,
+\end{equation}
+time-averaged spread being the same quantity up to the constant $1/T$.
+
+\textbf{Fairness.} Let $u_g$ denote group $g$'s time-averaged realized reach
+fraction (active fraction of $G_g$, averaged over rounds). Following an
+isoelastic (constant elasticity of substitution) welfare
+form~\cite{rahmattalabi2021fair}, define
+\begin{equation}
+W_\alpha(u) = \sum_g N_g\,\frac{u_g^\alpha}{\alpha}\ (\alpha\ne0), \qquad
+W_0(u) = \sum_g N_g \log u_g,
+\end{equation}
+population-weighted by group size $N_g$; $\alpha\to1$ is utilitarian,
+$\alpha=0$ is proportional fairness, and $\alpha\to-\infty$ approaches
+leximin. As detailed in Section~\ref{sec:fairness-fix}, this project
+identifies and corrects a measured pathology in the population-weighted
+form and adopts, by default, the egalitarian (population-unweighted)
+variant $W_\alpha(u)=\sum_g u_g^\alpha/\alpha$ instead, which counts each
+group once regardless of size.
+
+\section{Theoretical Results}
+\label{sec:theory}
+
+Statements below preserve the status labels of the underlying project
+notes exactly: \emph{proven} (theorem, proposition, lemma, with a proof or
+complete proof sketch), \emph{cited} (an external result relied upon), or
+\emph{conjectural/conditional} (stated precisely, with the reason it is
+not yet proven). No conjectural or conditional statement is used as a
+premise for any theorem.
+
+\subsection{Submodularity of the recovery-only process}
+
+\begin{lemma}[Layered live-edge representation]
+\label{lem:layered}
+Fix $\beta=0$. Build a layered graph $\mathcal{L}$ on $V\times\{0,\dots,T\}$
+with, for each round $t$, a self-edge $(v,t)\to(v,t{+}1)$ live iff
+$R^t_v=0$, and a cross-edge $(u,t)\to(v,t{+}1)$ for each $(u,v)\in E$, live
+iff $X^t_{uv}=1$. Then for every realization of the randomness,
+$A_t = \{v : (v,t) \text{ reachable from } S\times\{0\}\text{ along live edges}\}$.
+\end{lemma}
+\emph{Proof.} By induction on $t$; at $t=0$ both sides equal $S$, and the
+inductive step is exactly the layered-semantics transition rule read as a
+reachability statement. $\blacksquare$
+
+\begin{lemma}[Recovery alone preserves monotone submodularity]
+\label{lem:recovery-submodular}
+For $\beta=0$ and any recovery rates $q_v\in[0,1]$, $f_0(S)$ is monotone and
+submodular in $S$.
+\end{lemma}
+\emph{Proof.} For each fixed realization, $|A_t|$ is the number of
+layer-$t$ nodes reachable from $S\times\{0\}$ in a fixed DAG (Lemma~\ref{lem:layered}) --
+a coverage function of $S$, hence monotone submodular; sums over $t$ and
+expectations over realizations of monotone submodular functions remain
+monotone submodular. $\blacksquare$
+
+This isolates exactly which relaxation is "free": spontaneous,
+state-independent recovery is harmless (it is a random self-edge and
+reachability stays a coverage function), while neighbor-dependent
+deactivation (backfire) destroys the coverage structure, since an active
+in-neighbor can now \emph{remove} a node from the reachable set. This
+sharpens the picture in Chan and Ning~\cite{chan2015influence}, who lose
+submodularity under non-progressive \emph{threshold} rules where
+deactivation depends on neighbor states; recovery alone needs no such
+structure to stay submodular, on any graph.
+
+\subsection{A sandwich approximation for all backfire intensities}
+
+Let $U(S)\eqdef f_0(S)$ (the $\beta=0$ process at the true recovery rates).
+For node $v$, let
+$\delta_v \eqdef 1-\prod_{u\in N_{\mathrm{in}}(v)}(1-\beta p_{uv}) \le \beta\Delta_{\mathrm{in}}$,
+where $\Delta_{\mathrm{in}}\eqdef\max_v\sum_{u\in N_{\mathrm{in}}(v)}p_{uv}$,
+and let $L(S)$ be the $\beta=0$ process under inflated recovery
+$q'_v\eqdef1-(1-q_v)(1-\delta_v)$.
+
+\begin{lemma}[Upper coupling]
+\label{lem:upper}
+Under shared randomness, $A^\beta_t\subseteq A^0_t$ for all $t$; hence
+$f_\beta(S)\le U(S)$.
+\end{lemma}
+
+\begin{lemma}[Lower coupling]
+\label{lem:lower}
+There is a coupling under which $A^L_t\subseteq A^\beta_t$ for all $t$;
+hence $L(S)\le f_\beta(S)$.
+\end{lemma}
+
+Both couplings are proven by induction, replacing the per-edge backfire
+trials with a single uniform draw compared against the aggregate kill
+probability and, respectively, against $\delta_v$; the key inequality is
+that $\beta$-kill implies $L$-extra-recovery because the $\beta$-kill
+threshold is at most $\delta_v$ (attained when every in-neighbor is
+active).
+
+\begin{theorem}[Sandwich approximation, all $\beta$]
+\label{thm:sandwich}
+$L$ and $U$ are monotone submodular (Lemma~\ref{lem:recovery-submodular})
+and $L\le f_\beta\le U$ pointwise (Lemmas~\ref{lem:upper}--\ref{lem:lower}).
+Let $S_L, S_U$ be the greedy solutions for $L, U$ under $|S|\le k$, $S_\beta$
+the greedy solution run directly on $f_\beta$, and
+$S_{\mathrm{sand}}=\arg\max_{S\in\{S_L,S_U,S_\beta\}} f_\beta(S)$. Then, with
+$S^\star$ optimal for $f_\beta$,
+\begin{equation}
+f_\beta(S_{\mathrm{sand}}) \ge \max\left\{\frac{f_\beta(S_U)}{U(S_U)},\ \frac{L(S^\star)}{f_\beta(S^\star)}\right\}\Big(1-\frac1e\Big) f_\beta(S^\star) \ge \rho\Big(1-\frac1e\Big)\mathrm{OPT}_\beta,
+\end{equation}
+where $\rho \eqdef \min_{|S|\le k} L(S)/U(S)$.
+\end{theorem}
+\emph{Proof.} Cited: the sandwich-approximation theorem of Lu, Chen, and
+Lakshmanan~\cite{lu2015competition}, applied to the bracket $L\le f_\beta\le U$;
+the $(1-1/e)$ factors are~\cite{nemhauser1978analysis} applied to greedy on
+each submodular surrogate. The final inequality follows from
+$L(S^\star)/f_\beta(S^\star)\ge L(S^\star)/U(S^\star)\ge\rho$. $\blacksquare$
+
+Theorem~\ref{thm:sandwich} improves on treating backfire as an arbitrary
+perturbation from submodularity via~\cite{horel2016maximization}, which
+would only hold for $\beta=O(n^{-1/2})$ -- far below the
+$\beta\in[0.1,0.7]$ regime our empirical study targets -- because it
+exploits the \emph{structure} of the perturbation (a bounded extra kill
+rate) rather than treating it adversarially, and it holds for every
+$\beta$, recovering the tight $(1-1/e)$ exactly at $\beta=0$ (where $L=U$,
+$\rho=1$). It also yields a practical corollary: since $L$ and $U$ are
+ordinary $\beta=0$ processes that can be simulated directly, $f_\beta(S)/U(S)$
+is a directly computable, per-instance certificate,
+$f_\beta(S)\ge \frac{f_\beta(S)}{U(S)}(1-\frac1e)\mathrm{OPT}_\beta$ -- the
+algorithm ships its own approximation guarantee on every instance it is run
+on.
+
+\begin{proposition}[Finite-horizon bound on $\rho$]
+\label{prop:rho-bound}
+$\rho \ge (1-\beta\Delta_{\mathrm{in}})^T$.
+\end{proposition}
+This is proven by charging every self-edge of a witness reachability path
+under the coupling of Lemma~\ref{lem:lower}, and is conservative (it ignores
+re-activation through alternate paths). A tighter steady-state conjecture,
+$\rho \gtrsim q/(q+\beta\Delta_{\mathrm{in}})$ for $q=\min_v q_v$, is stated
+in the underlying project notes as an explicit \emph{conjecture}: the
+heuristic single-sojourn argument does not account for the downstream
+cascade a shortened sojourn fails to seed, and closing that gap is left
+open. This conjecture is not used in any proof in this paper (Section~\ref{sec:limitations}
+discusses why it is, in any case, not the most promising target for
+tightening the sandwich ratio).
+
+\subsection{A closed-form index for the control problem}
+\label{sec:index}
+
+Given the mean-field belief field (Section~\ref{sec:algorithm}), each
+node's per-round control problem is a 2-state MDP -- states
+$s\in\{0,1\}$, discount $\gamma$, reward $w$ at $s=1$ -- with natural
+transitions $a=p_{01}$ (activate), $b=p_{10}$ (deactivate), and three
+actions: NONE (free, either state), CONVERT (cost $c_C$, forces $0\to1$,
+only at $s=0$), MAINTAIN (cost $c_M$, forces stay-at-1, only at $s=1$),
+under a shared Lagrange price $\lambda$ per unit cost. There are exactly
+four deterministic stationary policies, named by (action at 0, action at
+1): NN, NM, CN, CM.
+
+\begin{proposition}[Closed forms]
+\label{prop:closedform}
+With $D\eqdef(1-\gamma)(1-\gamma+\gamma(a+b))$, each policy's value
+functions $V_1(\lambda), V_0(\lambda)$ are given in closed, affine-in-$\lambda$
+form by solving its fixed $2\times2$ linear system (e.g., for CN,
+$V_0=-\lambda c_C+\gamma V_1$ and $V_1=w+\gamma[(1-b)V_1+bV_0]$, giving
+$V_1=(w-\gamma b\lambda c_C)/((1-\gamma)(1+\gamma b))$); the full table of
+four closed forms is given in the underlying project notes and reproduced
+in the algorithm's implementation.
+\end{proposition}
+
+\begin{proposition}[Convexity in $\lambda$]
+\label{prop:convexity}
+$V^*(s,\lambda)=\max_\pi V_\pi(s,\lambda)$ over the four policies is a
+maximum of four affine functions of $\lambda$: convex, piecewise linear,
+with at most three breakpoints, computable in $O(1)$.
+\end{proposition}
+\emph{Proof.} In a discounted finite MDP some stationary deterministic
+policy is optimal at every state simultaneously, so $V^*$ is exactly this
+finite max; Killian, Perrault, and Tambe~\cite{killian2021beyond} (their
+Prop.\ 4.1) prove convexity in $\lambda$ for the general multi-action
+restless-bandit case, of which this is a one-line special case via finite
+enumeration of the four policies. $\blacksquare$
+
+\begin{proposition}[Index and indexability, this case]
+\label{prop:indexability}
+Define node $v$'s index $\lambda^\star_v$ as the largest $\lambda\ge0$ at
+which the optimal policy still takes the paid action at $v$'s current state.
+\end{proposition}
+A proof \emph{sketch} shows the paid action's advantage over NONE has a
+strictly negative slope in $\lambda$ from the cost term, while the value
+gap $V^*_1-V^*_0$ is non-increasing in $\lambda$ on each linear piece,
+checked by finite case analysis over the four policies. \textbf{We state
+plainly, matching the underlying project notes' own status label, that
+indexability -- i.e., that the paid set is a down-set $[0,\lambda^\star_v]$
+-- is only verified numerically here} (on random instances, over a fine
+$\lambda$ grid, checking that per-node cost is non-increasing in
+$\lambda$), not proven in general; the finite four-policy structure makes
+this tractable to check exactly where Killian et
+al.~\cite{killian2021beyond} call general multi-action indexability
+"notoriously difficult" and avoid it. The index itself is defined as the
+supremum of the paid set, which remains well-defined and exactly computable
+regardless.
+
+\begin{theorem}[Per-round complexity]
+\label{thm:complexity}
+Given Propositions~\ref{prop:closedform}--\ref{prop:indexability}, one
+round of the control policy costs $O(Km+n\log n)$, where $K$ is the number
+of mean-field fixed-point iterations (geometric convergence under a
+contraction condition on $\Delta\max(p^+,p^-)$).
+\end{theorem}
+The $n\log n$ term sorts nodes by $\lambda^\star_v$ and fills the shared
+budget greedily -- exactly "smallest $\lambda$ with aggregate cost
+$\le B$," the target of the bisection-plus-value-iteration procedure it
+replaces, which cost $O(n\cdot I_{\mathrm{bisect}}\cdot I_{\mathrm{VI}})$
+(on the order of $8000\,n$ scalar operations per round in our
+configuration); this project's own measurements put the closed-form
+replacement at roughly $130\times$ faster per round than that bisection
+oracle. For comparison, naive Monte Carlo KKT greedy costs $O(knRm)$ per
+seed set, and one static IMM selection costs
+$O((k+\ell)(n+m)\log n/\varepsilon^2)$~\cite{tang2015influence}: our
+per-round cost is near-linear like a single IMM run but is paid $T$ times,
+the stated price of sustaining influence under decay rather than seeding
+once.
+
+\subsection{Hardness}
+\label{sec:hardness}
+
+For $\beta=0$ (and $q=0$, large $T$), the problem contains max-$k$-cover, so
+$1-1/e$ is an unbeatable ceiling for every $\beta\ge0$ under
+$\mathrm{P}\ne\mathrm{NP}$~\cite{feige1998threshold,nemhauser1978analysis} --
+adding backfire cannot remove hard instances on which $\beta$ is simply
+irrelevant. For adversarial, arbitrary non-submodular perturbations, no
+constant-factor approximation exists in general once a function is
+$\omega(n^{-1/2})$-far from submodular~\cite{horel2016maximization};
+Theorem~\ref{thm:sandwich} escapes this only because our perturbation is
+structured, not adversarial.
+
+\begin{theorem}
+\label{thm:hardness}
+For every fixed $\beta\in[0,1)$, no polynomial-time algorithm approximates
+$f_\beta$ within $(1-1/e+\varepsilon)$ for any $\varepsilon>0$ unless
+$\mathrm{P}=\mathrm{NP}$.
+\end{theorem}
+\emph{Proof.} Reduction from max-$k$-cover,
+$(1-1/e+\varepsilon)$-inapproximable unless
+$\mathrm{P}=\mathrm{NP}$~\cite{feige1998threshold}. Build a bipartite
+digraph (set-nodes to element-nodes, edge probability 1), each element
+replicated to swamp the additive seed-count term. The key subtlety is that
+backfire \emph{is} realized on this instance (a seed keeps attacking every
+element it covers), so its harmlessness must be shown, not assumed. On this
+instance class, an element with $c\ge1$ active covering seeds throughout is
+a two-state chain with up-rate 1 and down-rate $1-(1-\beta)^c$, giving an
+exact value formula
+$f_\beta(S)=kT+T\sum_v\varphi_\beta(c_v(S))+O(n)$ with
+$\varphi_\beta(c)=1/(2-(1-\beta)^c)$ strictly decreasing in $c\ge1$ and
+bounded below by $1/2$; the max-coverage gap therefore survives backfire
+intact. $\blacksquare$
+
+This value formula also shows $f_\beta\ge f_0/2$ for \emph{every} seed set
+on this instance class at $q=0$, exactly where the sandwich ratio $\rho$ of
+Theorem~\ref{thm:sandwich} is vacuous ($\rho=0$).
+
+\begin{proposition}[Conditional -- not a theorem]
+\label{prop:conditional}
+Suppose Feige's NO-instances additionally satisfy: for every candidate
+$k$-subset $S$, the number of elements covered exactly once is at most
+$(1/e+\varepsilon)n$. Then no polynomial-time algorithm achieves ratio
+$c(\beta)(1-1/e)+\varepsilon'$, where
+\begin{equation}
+c(\beta)(1-1/e) = \frac1e + \Big(1-\frac2e\Big)\frac{\varphi_\beta(2)}{\varphi_\beta(1)}
+= (1-1/e) - \Big(1-\frac2e\Big)\frac{\beta(1-\beta)}{1+2\beta-\beta^2}.
+\end{equation}
+\end{proposition}
+Numerically $c(\beta)\approx0.968,0.946,0.939,0.940,0.960,0.981$ at
+$\beta=0.1,0.25,0.4,0.5,0.75,0.9$, worst near $\beta\approx0.45$, vanishing
+at both ends. \textbf{We flag this explicitly, and only, as a conditional
+result, exactly as it is labeled in the underlying project notes}: the
+extra property is not part of Feige's stated result, though it is
+plausible (a Chernoff/union-bound concentration argument for the
+"covered-exactly-once" statistic under a random partition), and two gaps
+remain -- (i) the analogous block-averaging step needs concavity of
+$d\mapsto\mathbb{E}\,\varphi_\beta(\mathrm{Bin}(d,1/k))$, unchecked; (ii)
+cross-terms from two sets in the same partition class need the reduction's
+pairwise-soundness property re-verified for this statistic. We report this
+as "very likely true, not yet proven," and do not use it as a premise for
+any theorem in this paper. Structural evidence -- a per-edge revive-at-least-as-fast-as-kill
+asymmetry, and several natural gadget constructions all failing for the
+same underlying reason -- suggests no super-constant worsening is
+achievable for fixed $\beta$, but this too is offered as evidence, not a
+proof.
+
+\section{Algorithm: MF-BWI-Fair}
+\label{sec:algorithm}
+
+MF-BWI-Fair (Mean-Field Belief with a Lagrangian index and isoelastic-Welfare
+reweighting, Fair) is a stateful per-round control policy. Each round:
+
+\begin{enumerate}
+\item \textbf{Bayesian posterior tracking.} A Beta--Bernoulli tracker
+  maintains posterior means $\hat p_{uv}^+, \hat p_{uv}^-, \hat q_v$ for
+  every edge/node from observed trial outcomes; the policy never sees the
+  simulator's hidden true parameters, only these running estimates.
+\item \textbf{Mean-field belief fixed point.} Exact per-node marginals
+  require tracking correlations across the whole active-set distribution,
+  intractable at scale. We use the standard individual-based / N-intertwined
+  mean-field approximation from network epidemic models: each node's
+  in-neighbors are replaced by their marginal activation probabilities
+  $m_u$, giving the self-consistency equation
+  \begin{equation}
+  \begin{split}
+  m_v = m_v(1-\hat q_v)\!\!\prod_{u\in N_{\mathrm{in}}(v)}\!\!(1-\hat p^-_{uv}m_u) \\
+  {}+(1-m_v)\Big(1-\!\!\prod_{u\in N_{\mathrm{in}}(v)}\!\!(1-\hat p^+_{uv}m_u)\Big),
+  \end{split}
+  \end{equation}
+  solved by Jacobi fixed-point iteration to tolerance $10^{-4}$ or 50
+  iterations. We verified directly that the alternative network-coupling
+  method of Ou et al.~\cite{ou2022networked} does not apply here, since it
+  requires a deterministic action-vector coupling rather than the
+  genuinely bilinear neighbor-\emph{state} coupling this model has.
+\item \textbf{Group welfare weights.} Each group's current marginal
+  welfare weight $w_g$ is computed from its tracked time-averaged realized
+  reach $u_g$ (Section~\ref{sec:fairness-fix}), egalitarian by default.
+\item \textbf{Closed-form Lagrangian index.} Using the converged belief
+  field to obtain each node's "no-action" transition probabilities
+  $p_{01}(v), p_{10}(v)$, each node's 2-state/3-action MDP is built with
+  reward $r_v(s)=w_{g(v)}\cdot s$, and the shared-budget Lagrangian
+  relaxation is solved via the closed-form index of
+  Section~\ref{sec:index} (a bisection-plus-value-iteration oracle is kept
+  as a test reference).
+\item \textbf{Leftover-budget fill.} Any budget left over from the index
+  scan's discreteness is filled by a greedy tie-break on each node's
+  closed-form index (or Bellman gap, under the bisection oracle), keeping
+  the hard budget constraint intact without reintroducing per-group floors
+  or quotas.
+\item \textbf{Execute, observe, update.} Actions are applied; the simulator
+  advances one round under the layered-semantics transition rule
+  (Section~\ref{sec:model}); observed trial outcomes update the Bayesian
+  tracker; and each group's realized reach average $u_g$ is updated for the
+  next round's weights.
+\end{enumerate}
+
+\begin{algorithm}[t]
+\caption{MF-BWI-Fair, one round}
+\label{alg:mfbwi}
+\begin{algorithmic}[1]
+\REQUIRE graph $G$, state $s$, budget $B$, fairness exponent $\alpha$
+\STATE $(\hat p^+,\hat p^-,\hat q) \gets$ posterior means from tracker
+\STATE $m \gets$ mean-field fixed point of Eq.~(5) from $(s,\hat p^+,\hat p^-,\hat q)$
+\STATE $(p_{01}, p_{10}) \gets$ field transition probabilities from $m$
+\STATE $u \gets$ tracked per-group time-averaged reach
+\STATE $w \gets$ \textsc{GroupWelfareWeights}$(u, \alpha)$ \hfill (egalitarian default)
+\FOR{each node $v$}
+  \STATE build 2-state/3-action MDP with reward $w_{g(v)}\cdot s_v$, kernel $(p_{01}(v), p_{10}(v))$
+  \STATE $\lambda^\star_v \gets$ closed-form index (Prop.~\ref{prop:indexability})
+\ENDFOR
+\STATE sort nodes by $\lambda^\star_v$ descending; select prefix fitting in $B$
+\STATE greedily fill leftover budget by descending index among unselected nodes
+\STATE apply CONVERT/MAINTAIN to selected nodes, NONE elsewhere
+\STATE observe transition, update Bayesian tracker and $u_g$
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{The fairness fix: population-weighted vs.\ egalitarian welfare}
+\label{sec:fairness-fix}
+
+Rahmattalabi et al.'s isoelastic welfare weight, implemented exactly as
+published, is $w_g=N_g u_g^{\alpha-1}$ (or $N_g/u_g$ at $\alpha=0$): the
+correct marginal utility for maximizing \emph{aggregate} welfare, in which
+a group's contribution scales with its population. This has a concrete,
+measured downside for the stated goal of not neglecting a small group: at
+$\alpha=0$, group $g$'s weight exceeds group $g'$'s only once
+$u_{g'}/u_g > N_{g'}/N_g$ -- the smaller group must be under-served by a
+factor proportional to the group-size \emph{ratio} before the mechanism
+reacts at all. On this project's own three-group (20/40/60) benchmark
+graph, at a neutral $\alpha_{\mathrm{fair}}=0$ this kept the smallest group
+at a visibly lower realized reach than the largest purely because a
+$3\times$ reach gap was required before the weight formula began favoring
+it. We therefore adopt, as the default, the egalitarian
+(population-unweighted) form $w_g=u_g^{\alpha-1}$ (or $1/u_g$ at
+$\alpha=0$), a standard alternative welfare form in the social-welfare and
+fair-division literature (not a new mechanism), counting each group once
+regardless of size -- the appropriate choice when fairness means each
+\emph{group}, not each person, is treated fairly regardless of population.
+
+\section{Experimental Setup}
+\label{sec:setup}
+
+\textbf{Graph.} The primary validation graph is a single synthetic
+stochastic block model with three groups of unequal size (20/40/60, 120
+nodes total), within-block edge probability $p_{\mathrm{in}}=0.07$,
+between-block edge probability $p_{\mathrm{out}}=0.008$, and per-edge
+positive-influence probability $p_{uv}\sim\mathrm{Uniform}(0.05,0.15)$.
+Density was hand-tuned so the network neither saturates near full
+activation nor fails to cascade at all, either of which would mask the
+effects under study. \textbf{We state plainly that this is the only graph
+topology validated in this draft}; a multi-graph and real-dataset
+validation is in progress (\texttt{experiments/MULTIGRAPH\_VALIDATION.md})
+and is not reported here.
+
+\textbf{Budget and horizon.} Per-round budget $B=100$, horizon $T=30$
+rounds. One-shot baselines are given $k=20$ seeds, chosen so that
+$k\cdot\mathrm{cost}(\mathrm{CONVERT})=100=B$: one round's worth of
+MF-BWI-Fair's budget, spent once at round 0.
+
+\textbf{Baselines.} \emph{KKT-greedy/CELF}~\cite{kempe2003maximizing,leskovec2007cost}:
+classical Monte Carlo greedy under plain progressive IC ($\beta=0$, $q=0$),
+this project's own reimplementation, used as the "ignore all four
+relaxations" ablation. \emph{Fair-greedy}: an in-house welfare-weighted
+greedy baseline in the style of~\cite{rahmattalabi2021fair} maximizing a
+sum of concave per-group log-utilities. \emph{Repeated-greedy}: an in-house
+cost-effective greedy that re-selects actions every round under the same
+per-round budget, using \emph{true} parameters directly (no Bayesian
+uncertainty, no fairness mechanism) -- the strongest plausible classical
+competitor that also acts repeatedly, included specifically to isolate
+whether MF-BWI-Fair's advantage is more than "gets to act every round."
+\emph{IMM}~\cite{tang2015influence}: this project's independent
+reimplementation of the two-phase martingale sampling and node-selection
+algorithm, cross-checked against the paper's own pseudocode and against a
+documented erratum~\cite{chen2018issue}. \emph{He--Kempe Saturate
+Greedy}~\cite{he2016robust}: this project's independent reimplementation of
+the bicriteria robust algorithm, given the low/high corners of the
+$p_{uv}$ range as its scenario set. \emph{MF-BWI-Fair}, as described in
+Section~\ref{sec:algorithm}.
+
+\textbf{Honesty notes on baseline provenance.} Other than the objective
+forms they target, every baseline in this comparison is an
+independently-verified reimplementation, not the original authors' code.
+Official code exists for IMM (a SourceForge project by the original
+authors) but is not what is benchmarked here; no official code was found
+for He--Kempe's Saturate Greedy or for Rahmattalabi et al.'s welfare
+mechanism specifically. \textbf{A direct benchmark against IMM's original
+C++ implementation is in progress}
+(\texttt{experiments/IMM\_VALIDATION.md}) and is not reported here; until
+it lands, all reported IMM numbers should be read as characterizing this
+project's own reimplementation, cross-checked against the paper's stated
+algorithm and theorem statements, not as reproducing the original authors'
+published numbers.
+
+\textbf{Metrics.} (a) time-averaged active-node count over the full
+horizon; (b) per-group reach fraction (own-group-size-normalized,
+time-averaged) and its minimum across groups; (c) wall-clock runtime.
+Sweeps are conducted over backfire intensity $\beta$, recovery rate $q$,
+and the fairness exponent $\alpha_{\mathrm{fair}}$, each with 15
+independent trials using common random numbers across the swept parameter
+within a trial to reduce sweep-trend noise without narrowing between-trial
+variance.
+
+\section{Results}
+\label{sec:results}
+
+% TODO: results section pending experiments/MULTIGRAPH_VALIDATION.md and experiments/IMM_VALIDATION.md
+
+\section{Discussion and Limitations}
+\label{sec:limitations}
+
+\textbf{Single graph topology.} All findings to date are demonstrated on
+one synthetic stochastic block model; generalization across graph
+families, degree distributions, and real cascade datasets is the subject
+of ongoing, not-yet-reported work.
+
+\textbf{The conditional hardness result is exactly that.}
+Proposition~\ref{prop:conditional} is not a theorem: it depends on one
+plausible but unverified property of Feige's construction, and two
+identified technical gaps (a concavity step and a cross-term
+pairwise-soundness check) remain before it could become one. We report
+the qualitative structural evidence -- the revive-at-least-as-fast-as-kill
+asymmetry, and several gadget constructions all failing to encode a
+hard-to-decide dependence on the seed set -- as suggestive that no
+super-constant worsening exists for fixed $\beta$, not as a substitute for
+a proof.
+
+\textbf{No comparison against the original authors' code for He--Kempe or
+Rahmattalabi et al.} Neither paper has published code corresponding to the
+specific algorithm reimplemented here (a superficially related repository
+for Rahmattalabi et al.\ in fact implements a different paper,
+Tsang et al.~\cite{tsang2019group}, and must not be conflated with it).
+Only IMM has verifiable original code, and even there this draft benchmarks
+against our own reimplementation pending the validation noted in
+Section~\ref{sec:setup}.
+
+\textbf{The mean-field approximation's own error is not separately
+quantified.} The belief fixed point of Section~\ref{sec:algorithm} is an
+approximation whose deviation from the true (intractable) joint
+activation distribution has not been bounded or measured in isolation from
+the end-to-end policy's performance; this is a natural target for future
+analysis.
+
+\textbf{The sandwich bound is demonstrably loose, and this is a direction,
+not a hidden flaw.} Exact computation on small instances (2--8 nodes,
+$T\sim300$) shows the sandwich ratio $\rho$ loose by up to an order of
+magnitude where it applies at all (e.g., roughly $13\times$ on a directed
+star instance, because the lower surrogate inflates every node's recovery
+uniformly by $\delta_v$ even where a node has no active in-neighbor left),
+and vacuous whenever $q=0$ or $q+\beta\Delta_{\mathrm{in}}\ge1$. Separately,
+$f_\beta/f_0$ is not bounded below by any instance-independent constant (a
+bidirected $K_6$ instance at $\beta=0.5,q=0.05$ collapses by a factor of
+roughly $300\times$ relative to $f_0$), so no purely multiplicative
+comparison against $f_0$ can be the source of a strong general guarantee.
+Yet greedy run on the plain $\beta=0$ surrogate landed within 1\% of
+$\mathrm{OPT}_\beta$ on every one of the six small instances tested --
+suggestive, not proof, that the practical quality of surrogate-greedy
+substantially exceeds what $\rho(1-1/e)$ certifies. We read this as the
+concrete next step for this line of work: a sharper \emph{upper}-bound
+analysis (a per-instance or instance-class argument in the spirit of the
+exact layered value formula behind Theorem~\ref{thm:hardness}), rather
+than a search for a matching lower bound on $\rho$ itself, which the
+evidence here suggests is not the right quantity to target.
+
+\textbf{Indexability is checked, not proven.} As stated in
+Proposition~\ref{prop:indexability}, the down-set property underlying the
+closed-form index's exactness is verified numerically on random instances
+over a fine $\lambda$ grid, not established as a general theorem for this
+2-state/3-action case.
+
+\textbf{An open, unconditional route to a matching lower bound.} The
+underlying project notes identify, but do not pursue to completion, a
+possible unconditional alternative to Proposition~\ref{prop:conditional}:
+the class of functions $S\mapsto\sum_v\varphi(c_v(S))$ is closed under the
+same symmetrization used in Vondr{\'a}k's symmetry-gap
+framework~\cite{vondrak2013symmetry}, and the symmetric-instance gap for
+$\varphi_\beta$ (Theorem~\ref{thm:hardness}'s proof) works out numerically
+close to, and slightly below, Proposition~\ref{prop:conditional}'s
+constant. Whether Vondr{\'a}k's smoothing-step argument -- which uses
+submodularity directly -- extends to this non-submodular but structured
+class is open and was not checked; if it does, it would give an
+unconditional oracle-model lower bound without needing the unverified
+property Proposition~\ref{prop:conditional} depends on. We flag this as the
+single most promising next step toward turning Section~\ref{sec:hardness}'s
+conditional result into a proof.
+
+\section{Conclusion}
+
+We formalized a combined relaxation of the four assumptions behind the
+classical influence-maximization guarantee -- progressive dynamics,
+monotone submodularity, known parameters, and fairness-free objectives --
+and proved that a sandwich approximation recovers a $\rho(1-1/e)$ guarantee
+for every backfire intensity, with a closed-form index making the
+resulting control problem tractable at near-linear per-round cost. We
+proved that $(1-1/e)$-hardness survives backfire exactly, while explicitly
+declining to upgrade a plausible but unproven constant-factor worsening
+result to theorem status. We corrected a measured fairness pathology in an
+existing welfare objective and implemented the result in MF-BWI-Fair.
+Preliminary single-graph experiments are encouraging; a full validation
+against additional graph families and against IMM's original
+implementation is in progress and left to future revisions of this
+manuscript.
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}
