@@ -23,27 +23,39 @@ clearly separate directory (results_multigraph/real_facebook_348_fullbudget/)
 so the original reduced-budget run's results are left untouched for the
 before/after comparison.
 
-CHECKPOINTED / RESUMABLE: this run's total cost (3 sweeps x 15 trials each,
-full-budget num_sims) is estimated at many hours, and this execution
+CHECKPOINTED / RESUMABLE, AT (trial, swept-value) GRANULARITY: this run's
+total cost (3 sweeps x 15 trials each, full-budget num_sims, on a 224-node/
+6384-edge graph) is estimated at many hours, and this execution
 environment's containers are NOT guaranteed to survive that long unattended
-(a container can be reclaimed/restarted with no warning, silently killing a
-plain background process -- this happened to the first attempt at this run).
-So instead of computing each sweep in one in-memory pass and writing its CSV
-only at the end, this script processes ONE TRIAL AT A TIME, appends that
-trial's rows to the sweep's CSV immediately, and records the trial as done
-in a checkpoint file. Re-running this exact command (same argv, same output
-dir) after a restart skips whatever trials the checkpoint already has and
-resumes -- all seeding is deterministic per (config.name, sweep, trial) via
+-- a container can be reclaimed/restarted with no warning (empirically,
+after roughly 30-60 minutes with no active conversation turn, REGARDLESS of
+whether a background process is still busy computing), silently killing a
+plain background process. Two attempts at this run were lost this way
+before this version existed -- the first because nothing was checkpointed
+at all, the second because checkpointing only happened once per WHOLE
+TRIAL (6 sweep values x 6 algorithms' full-budget forward simulation),
+which itself turned out to take longer than this environment's typical
+survival window, so it died before completing even one trial.
+
+So this version checkpoints after each single (trial, swept value) --
+computing all algorithms' rows for just one value of beta/q/alpha at a
+time, appending those rows to the sweep's CSV immediately, and recording
+the (trial, value-index) pair as done. It also persists each trial's
+one-shot seed sets (CELF/fair-greedy/IMM/robust-Kempe selections) to the
+checkpoint the first time that trial is touched, so resuming mid-trial
+doesn't redo that selection cost on every restart -- only the forward
+simulation of whichever (trial, value) pairs are not yet marked done. All
+of this is deterministic per (config.name, sweep, trial, value) via
 context_seed, so a resumed run produces byte-identical rows to an
-uninterrupted one. Worst case lost work from a mid-trial container death is
-one trial's compute, not the whole run.
+uninterrupted one; re-invoking this exact command after a restart resumes
+from the checkpoint automatically.
 
 Run with: python experiments/run_real_facebook_fullbudget.py
 (expected runtime: potentially several hours at this graph's density --
 run as a background process, e.g.
   nohup python experiments/run_real_facebook_fullbudget.py > /tmp/real_facebook_fullbudget.log 2>&1 &
 matching the pattern used elsewhere in this project. Safe to re-invoke the
-same command at any time to resume from the last completed trial.)
+same command at any time to resume from the last completed (trial, value).)
 """
 
 from __future__ import annotations
@@ -104,7 +116,7 @@ def _load_checkpoint():
     if os.path.exists(CHECKPOINT_PATH):
         with open(CHECKPOINT_PATH) as f:
             return json.load(f)
-    return {"beta": [], "q": [], "alpha": []}
+    return {"beta": {}, "q": {}, "alpha": {}}
 
 
 def _save_checkpoint(ckpt):
@@ -127,12 +139,25 @@ def _append_rows(rows, path):
 
 
 def _read_rows(path):
+    """Read back a sweep's accumulated CSV, de-duplicating by (trial, param,
+    algorithm), keeping the first occurrence of each. A crash between
+    _append_rows (which writes a value's rows) and _save_checkpoint (which
+    marks that value done) can leave rows written but not marked done, so a
+    resumed run recomputes and re-appends that same value -- this is the one
+    failure direction possible given the write-then-checkpoint order below
+    (never the reverse: a value is never marked done without its rows
+    already written), and de-duping here makes it harmless."""
     if not os.path.exists(path):
         return []
     with open(path, newline="") as f:
         reader = csv.DictReader(f)
+        seen = set()
         rows = []
         for r in reader:
+            key = (r["trial"], r["param"], r["algorithm"])
+            if key in seen:
+                continue
+            seen.add(key)
             r["trial"] = int(r["trial"])
             r["time_avg_spread"] = float(r["time_avg_spread"])
             r["min_group_reach"] = float(r["min_group_reach"])
@@ -141,24 +166,47 @@ def _read_rows(path):
         return rows
 
 
-def _run_sweep_resumable(sweep_name, csv_path, trial_fn, ckpt, t_start):
-    done = set(ckpt[sweep_name])
+def _run_sweep_resumable(sweep_name, csv_path, values, value_fn, ckpt, t_start):
+    """value_fn(trial, trial_seed, seed_sets, v_index, v) -> rows for one
+    (trial, value). Checkpoints after each value; persists seed_sets the
+    first time a trial is touched (see module docstring)."""
+    sweep_ckpt = ckpt[sweep_name]
     for trial in range(CONFIG.N_TRIALS):
-        if trial in done:
-            continue
-        rows = trial_fn(trial)
-        _append_rows(rows, csv_path)
-        ckpt[sweep_name].append(trial)
-        _save_checkpoint(ckpt)
-        print(f"  {sweep_name} trial {trial + 1}/{CONFIG.N_TRIALS} done at {time.time() - t_start:.1f}s", flush=True)
+        key = str(trial)
+        entry = sweep_ckpt.setdefault(key, {"seed_sets": None, "done": []})
+        trial_seed = MC.context_seed(CONFIG.name, "trial_seed", sweep_name, trial)
+        if entry["seed_sets"] is None:
+            entry["seed_sets"] = MC.compute_baseline_seed_sets(build_G(), CONFIG, trial_seed)
+            _save_checkpoint(ckpt)
+        seed_sets = entry["seed_sets"]
+        done = set(entry["done"])
+        for idx, v in enumerate(values):
+            if idx in done:
+                continue
+            rows = value_fn(trial, trial_seed, seed_sets, idx, v)
+            _append_rows(rows, csv_path)
+            entry["done"].append(idx)
+            _save_checkpoint(ckpt)
+            print(f"  {sweep_name} trial {trial + 1}/{CONFIG.N_TRIALS} value {idx + 1}/{len(values)} "
+                  f"({v}) done at {time.time() - t_start:.1f}s", flush=True)
     return _read_rows(csv_path)
+
+
+_G_CACHE = None
+
+
+def build_G():
+    global _G_CACHE
+    if _G_CACHE is None:
+        _G_CACHE = CONFIG.build_graph()
+    return _G_CACHE
 
 
 def run():
     out_dir = RESULTS_DIR
     os.makedirs(out_dir, exist_ok=True)
 
-    G = CONFIG.build_graph()
+    G = build_G()
     group_of = graphs.group_of_map(G)
     group_sizes = graphs.group_sizes(G)
     print(f"=== {CONFIG.name} === nodes={G.number_of_nodes()} edges={G.number_of_edges()} groups={group_sizes}", flush=True)
@@ -168,13 +216,13 @@ def run():
 
     beta_path = os.path.join(out_dir, "beta_sweep.csv")
     beta_rows = _run_sweep_resumable(
-        "beta", beta_path,
-        lambda trial: MC.run_beta_or_q_sweep_trial(
-            CONFIG, "beta", CONFIG.BETA_VALUES,
-            true_beta_of=lambda v: v,
+        "beta", beta_path, CONFIG.BETA_VALUES,
+        lambda trial, trial_seed, seed_sets, idx, v: MC.run_beta_or_q_sweep_value(
+            CONFIG, "beta", v, true_beta_of=lambda v: v,
             q_range_of=lambda v: (CONFIG.BETA_SWEEP_Q, CONFIG.BETA_SWEEP_Q),
             alpha_fair=CONFIG.DEFAULT_ALPHA_FAIR,
-            G=G, group_of=group_of, group_sizes=group_sizes, trial=trial,
+            G=G, group_of=group_of, group_sizes=group_sizes,
+            trial=trial, trial_seed=trial_seed, seed_sets=seed_sets,
         ),
         ckpt, t_start,
     )
@@ -185,13 +233,13 @@ def run():
 
     q_path = os.path.join(out_dir, "q_sweep.csv")
     q_rows = _run_sweep_resumable(
-        "q", q_path,
-        lambda trial: MC.run_beta_or_q_sweep_trial(
-            CONFIG, "q", CONFIG.Q_VALUES,
-            true_beta_of=lambda v: CONFIG.Q_SWEEP_BETA,
+        "q", q_path, CONFIG.Q_VALUES,
+        lambda trial, trial_seed, seed_sets, idx, v: MC.run_beta_or_q_sweep_value(
+            CONFIG, "q", v, true_beta_of=lambda v: CONFIG.Q_SWEEP_BETA,
             q_range_of=lambda v: (v, v),
             alpha_fair=CONFIG.DEFAULT_ALPHA_FAIR,
-            G=G, group_of=group_of, group_sizes=group_sizes, trial=trial,
+            G=G, group_of=group_of, group_sizes=group_sizes,
+            trial=trial, trial_seed=trial_seed, seed_sets=seed_sets,
         ),
         ckpt, t_start,
     )
@@ -201,11 +249,25 @@ def run():
     print(f"  q sweep done at {time.time() - t_start:.1f}s", flush=True)
 
     alpha_path = os.path.join(out_dir, "alpha_sweep.csv")
-    alpha_rows = _run_sweep_resumable(
-        "alpha", alpha_path,
-        lambda trial: MC.run_alpha_sweep_trial(CONFIG, G, group_of, group_sizes, trial),
-        ckpt, t_start,
-    )
+
+    # Cache the current trial's baseline trajectories across its ALPHA_VALUES
+    # calls within this process run (cleared on moving to the next trial) --
+    # only mf_bwi_fair varies with alpha, so recomputing this per-value
+    # within one uninterrupted run would be pure waste. A restart still just
+    # recomputes it once for whichever trial is resumed (see module
+    # docstring); nothing here is persisted to the checkpoint.
+    _baseline_cache = {}
+
+    def alpha_value_fn(trial, trial_seed, seed_sets, idx, v):
+        if trial not in _baseline_cache:
+            _baseline_cache.clear()
+            _baseline_cache[trial] = MC.compute_alpha_baselines(CONFIG, G, seed_sets, trial_seed)
+        baseline_traj, baseline_rt = _baseline_cache[trial]
+        return MC.run_alpha_sweep_value(
+            CONFIG, G, group_of, group_sizes, trial, trial_seed, seed_sets, baseline_traj, baseline_rt, v
+        )
+
+    alpha_rows = _run_sweep_resumable("alpha", alpha_path, CONFIG.ALPHA_VALUES, alpha_value_fn, ckpt, t_start)
     alpha_summary, alpha_values = MC.summarize(alpha_rows, MC.ALGOS)
     plot_sweep(alpha_summary, alpha_values, MC.ALGOS, "Fairness parameter alpha_fair",
                f"{CONFIG.name}: spread vs. alpha_fair", os.path.join(out_dir, "alpha_sweep.png"))

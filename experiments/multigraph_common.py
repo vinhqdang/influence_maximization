@@ -269,32 +269,43 @@ def metrics_row(sweep, param, algo, trial, trajectory, group_of, group_sizes, ru
 SWEEP_SEED_OFFSET = {"beta": 1, "q": 2, "alpha": 3}
 
 
-def run_beta_or_q_sweep_trial(config: GraphConfig, sweep_name, values, true_beta_of, q_range_of, alpha_fair, G, group_of, group_sizes, trial):
-    """One trial's worth of rows for run_beta_or_q_sweep, factored out so a
-    caller (e.g. a checkpointed long-running driver) can persist progress
-    after each trial instead of only once the whole sweep finishes."""
+def run_beta_or_q_sweep_value(config: GraphConfig, sweep_name, v, true_beta_of, q_range_of, alpha_fair, G, group_of, group_sizes, trial, trial_seed, seed_sets):
+    """One (trial, swept value)'s worth of rows -- the finest-grained unit of
+    run_beta_or_q_sweep, factored out so a caller (e.g. a checkpointed
+    long-running driver) can persist progress after each value instead of
+    only after a whole trial (a trial's full set of values x algorithms can
+    itself take longer than this kind of driver can rely on running
+    uninterrupted)."""
     rows = []
+    true_beta = true_beta_of(v)
+    q_range = q_range_of(v)
+
+    for algo in ("kkt_greedy", "fair_greedy", "imm", "robust_kempe"):
+        traj, rt = run_baseline_forward(
+            G, config, seed_sets[algo], true_beta, q_range, trial_seed, algo, sweep_name, v
+        )
+        rows.append(metrics_row(
+            sweep_name, v, algo, trial, traj, group_of, group_sizes, rt,
+            n_seeds=len(seed_sets[algo]),
+        ))
+
+    traj, rt = run_mfbwi_forward(G, config, true_beta, alpha_fair, q_range, trial_seed, sweep_name, v)
+    rows.append(metrics_row(sweep_name, v, "mf_bwi_fair", trial, traj, group_of, group_sizes, rt))
+
+    traj, rt = run_repeatedgreedy_forward(G, config, true_beta, q_range, trial_seed, sweep_name, v)
+    rows.append(metrics_row(sweep_name, v, "repeated_greedy", trial, traj, group_of, group_sizes, rt))
+    return rows
+
+
+def run_beta_or_q_sweep_trial(config: GraphConfig, sweep_name, values, true_beta_of, q_range_of, alpha_fair, G, group_of, group_sizes, trial):
+    """One trial's worth of rows for run_beta_or_q_sweep."""
     trial_seed = context_seed(config.name, "trial_seed", sweep_name, trial)
     seed_sets = compute_baseline_seed_sets(G, config, trial_seed)
-
+    rows = []
     for v in values:
-        true_beta = true_beta_of(v)
-        q_range = q_range_of(v)
-
-        for algo in ("kkt_greedy", "fair_greedy", "imm", "robust_kempe"):
-            traj, rt = run_baseline_forward(
-                G, config, seed_sets[algo], true_beta, q_range, trial_seed, algo, sweep_name, v
-            )
-            rows.append(metrics_row(
-                sweep_name, v, algo, trial, traj, group_of, group_sizes, rt,
-                n_seeds=len(seed_sets[algo]),
-            ))
-
-        traj, rt = run_mfbwi_forward(G, config, true_beta, alpha_fair, q_range, trial_seed, sweep_name, v)
-        rows.append(metrics_row(sweep_name, v, "mf_bwi_fair", trial, traj, group_of, group_sizes, rt))
-
-        traj, rt = run_repeatedgreedy_forward(G, config, true_beta, q_range, trial_seed, sweep_name, v)
-        rows.append(metrics_row(sweep_name, v, "repeated_greedy", trial, traj, group_of, group_sizes, rt))
+        rows.extend(run_beta_or_q_sweep_value(
+            config, sweep_name, v, true_beta_of, q_range_of, alpha_fair, G, group_of, group_sizes, trial, trial_seed, seed_sets
+        ))
     return rows
 
 
@@ -307,14 +318,12 @@ def run_beta_or_q_sweep(config: GraphConfig, sweep_name, values, true_beta_of, q
     return rows
 
 
-def run_alpha_sweep_trial(config: GraphConfig, G, group_of, group_sizes, trial):
-    """One trial's worth of rows for run_alpha_sweep -- see
-    run_beta_or_q_sweep_trial's docstring for why this is factored out."""
-    rows = []
+def compute_alpha_baselines(config: GraphConfig, G, seed_sets, trial_seed):
+    """The one-shot-algorithms' forward trajectories shared across all of a
+    trial's ALPHA_VALUES (only mf_bwi_fair itself varies with alpha) --
+    factored out so a resuming driver can recompute this bounded, once-per-
+    (trial-touched) cost without recomputing it once per alpha value."""
     q_range = (config.ALPHA_SWEEP_Q, config.ALPHA_SWEEP_Q)
-    trial_seed = context_seed(config.name, "trial_seed", "alpha", trial)
-    seed_sets = compute_baseline_seed_sets(G, config, trial_seed)
-
     baseline_traj = {}
     baseline_rt = {}
     for algo in ("kkt_greedy", "fair_greedy", "imm", "robust_kempe"):
@@ -329,18 +338,37 @@ def run_alpha_sweep_trial(config: GraphConfig, G, group_of, group_sizes, trial):
     )
     baseline_traj["repeated_greedy"] = traj
     baseline_rt["repeated_greedy"] = rt
+    return baseline_traj, baseline_rt
 
-    for v in config.ALPHA_VALUES:
-        for algo in ("kkt_greedy", "fair_greedy", "imm", "robust_kempe", "repeated_greedy"):
-            n_seeds = len(seed_sets[algo]) if algo in seed_sets else None
-            rows.append(
-                metrics_row(
-                    "alpha", v, algo, trial, baseline_traj[algo], group_of, group_sizes,
-                    baseline_rt[algo], n_seeds=n_seeds,
-                )
+
+def run_alpha_sweep_value(config: GraphConfig, G, group_of, group_sizes, trial, trial_seed, seed_sets, baseline_traj, baseline_rt, v):
+    """One (trial, alpha value)'s worth of rows -- the finest-grained unit of
+    run_alpha_sweep. See run_beta_or_q_sweep_value's docstring for why."""
+    rows = []
+    q_range = (config.ALPHA_SWEEP_Q, config.ALPHA_SWEEP_Q)
+    for algo in ("kkt_greedy", "fair_greedy", "imm", "robust_kempe", "repeated_greedy"):
+        n_seeds = len(seed_sets[algo]) if algo in seed_sets else None
+        rows.append(
+            metrics_row(
+                "alpha", v, algo, trial, baseline_traj[algo], group_of, group_sizes,
+                baseline_rt[algo], n_seeds=n_seeds,
             )
-        traj, rt = run_mfbwi_forward(G, config, config.ALPHA_SWEEP_BETA, v, q_range, trial_seed, "alpha", v)
-        rows.append(metrics_row("alpha", v, "mf_bwi_fair", trial, traj, group_of, group_sizes, rt))
+        )
+    traj, rt = run_mfbwi_forward(G, config, config.ALPHA_SWEEP_BETA, v, q_range, trial_seed, "alpha", v)
+    rows.append(metrics_row("alpha", v, "mf_bwi_fair", trial, traj, group_of, group_sizes, rt))
+    return rows
+
+
+def run_alpha_sweep_trial(config: GraphConfig, G, group_of, group_sizes, trial):
+    """One trial's worth of rows for run_alpha_sweep."""
+    trial_seed = context_seed(config.name, "trial_seed", "alpha", trial)
+    seed_sets = compute_baseline_seed_sets(G, config, trial_seed)
+    baseline_traj, baseline_rt = compute_alpha_baselines(config, G, seed_sets, trial_seed)
+    rows = []
+    for v in config.ALPHA_VALUES:
+        rows.extend(run_alpha_sweep_value(
+            config, G, group_of, group_sizes, trial, trial_seed, seed_sets, baseline_traj, baseline_rt, v
+        ))
     return rows
 
 
