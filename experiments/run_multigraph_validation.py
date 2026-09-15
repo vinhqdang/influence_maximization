@@ -90,6 +90,28 @@ def build_real_facebook_348():
     return G
 
 
+def build_real_facebook_686():
+    """Real graph: SNAP ego-Facebook node 686's friendship subgraph (168
+    nodes, single connected component -- see data/ego-facebook/README.md).
+    Community detection with min_size=40 (higher than 348's 15, since 686's
+    detected communities include one small residual that stays below 15
+    even after merging) gives 3 groups of sizes 63/56/49."""
+    G = graphs.load_edge_list_graph(os.path.join(os.path.dirname(__file__), "..", "data", "ego-facebook", "686.edges"))
+    graphs.assign_communities_as_groups(G, method="greedy_modularity", min_size=40)
+    return G
+
+
+def build_real_facebook_3437():
+    """Real graph: SNAP ego-Facebook node 3437's friendship subgraph (532
+    nodes as loaded, single connected component -- see
+    data/ego-facebook/README.md). Community detection with min_size=25
+    gives 6 groups of sizes 165/137/79/42/39/70 (the last a merged
+    residual of communities below the threshold)."""
+    G = graphs.load_edge_list_graph(os.path.join(os.path.dirname(__file__), "..", "data", "ego-facebook", "3437.edges"))
+    graphs.assign_communities_as_groups(G, method="greedy_modularity", min_size=25)
+    return G
+
+
 def build_small_sbm():
     """Smaller, denser SBM than the main study's (60 vs 120 nodes; p_in/p_out
     hand-tuned the same way the original graph was -- see common.py's tuning

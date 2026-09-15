@@ -1,30 +1,43 @@
-# ego-Facebook (node 348) -- real-world graph used for validation
+# ego-Facebook -- real-world graphs used for validation
+
+Three ego-networks from the same SNAP archive are used, to move validation
+beyond a single real graph (N=1): **348** (the original), **686**, and
+**3437**.
 
 - **Source**: SNAP, Stanford Network Analysis Project --
   https://snap.stanford.edu/data/ego-Facebook.html
 - **Direct file**: https://snap.stanford.edu/data/facebook.tar.gz
-  (this repo keeps only `348.edges`, extracted from that archive; the
-  archive also ships `.circles`/`.feat`/`.featnames`/`.egofeat` files for
-  each ego, none of which are used here -- see below).
+  (this repo keeps only `348.edges`/`686.edges`/`3437.edges`, extracted
+  from that archive; the archive also ships `.circles`/`.feat`/
+  `.featnames`/`.egofeat` files for each ego, none of which are used here
+  -- see below).
 - **Citation**: J. McAuley and J. Leskovec, "Learning to Discover Social
   Circles in Ego Networks," NIPS, 2012.
-- **What this file is**: the induced friendship subgraph among the Facebook
-  ego-user "348"'s friends (the ego node itself is excluded, per SNAP's own
-  convention for this dataset) -- 224 nodes, 3,192 undirected edges (listed
-  once per direction in the raw file, 6,384 lines total), a single connected
-  component, average degree ~28.5. Real, publicly available, and small
-  enough (well under the ~500-node budget) for this project's Monte-Carlo-
-  heavy algorithms (CELF-greedy, IMM, Saturate-Greedy/robust_kempe,
-  repeated_greedy, MF-BWI-Fair) to stay tractable.
-- **Why this ego (348) and not another**: of the 10 ego-networks shipped in
-  the archive, sizes range from 52 to 1,034 nodes. 348 was chosen because it
-  is (a) a moderate few-hundred-node size close to this project's existing
-  120-node synthetic graph, (b) a SINGLE connected component (several of the
-  others have small disconnected islands that `im_lab.graphs.load_edge_list_graph`
-  would otherwise have to drop), and (c) dense enough (avg degree ~28.5) that
-  a weighted-cascade probability assignment (`p = 1/in-degree`, typically
-  ~0.035 here) still produces a real cascade rather than dying out
-  immediately.
+- **What these files are**: the induced friendship subgraph among each
+  ego-user's friends (the ego node itself is excluded, per SNAP's own
+  convention for this dataset).
+
+| ego | nodes | undirected edges | avg degree | connected? |
+|---|---|---|---|---|
+| 348  | 224 | 3,192 | ~28.5 | single component |
+| 686  | 168 | 1,656 | ~19.7 | single component |
+| 3437 | 534 | 4,813 | ~18.0 | single component |
+
+All three are real, publicly available, single-connected-component, and
+well under the ~500-1000-node budget these Monte-Carlo-heavy algorithms
+(CELF-greedy, IMM, Saturate-Greedy/robust_kempe, repeated_greedy,
+MF-BWI-Fair) can stay tractable on.
+- **Why these three egos and not the other seven**: of the 10 ego-networks
+  shipped in the archive, sizes range from 52 to 1,034 nodes; only five
+  (107, 348, 686, 1912, 3437) are a SINGLE connected component (the rest
+  have small disconnected islands that `im_lab.graphs.load_edge_list_graph`
+  would otherwise have to drop, silently shrinking the graph below its
+  stated node count). Within that fully-connected subset, 348/686/3437
+  were picked for size diversity (168 to 534 nodes) while excluding the
+  two largest/densest (107: 1,034 nodes, avg degree ~51.7; 1912: 747
+  nodes, avg degree ~80.4), which would make the full study-matched
+  compute budget (`experiments/MULTIGRAPH_VALIDATION.md`) intractable in
+  this project's execution environment.
 - **What is deliberately NOT used from the archive**: the `.circles` /
   `.feat` / `.featnames` files encode real (anonymized) Facebook "friend
   list" circles and profile features for this ego's friends. This project

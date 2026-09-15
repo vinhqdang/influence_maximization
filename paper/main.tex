@@ -44,10 +44,8 @@ certificate. We derive a closed-form Lagrangian index for the resulting
 2-state/3-action per-node control problem, replacing a bisection-plus-value-iteration
 inner loop with an $O(Km+n\log n)$-per-round procedure that we measure to be
 roughly two orders of magnitude faster than the bisection oracle it replaces.
-We show that $(1-1/e)$-hardness survives backfire exactly, and we state --
-without overclaiming -- a conditional, not-yet-proven result suggesting a
-further constant-factor worsening for a plausible but unverified property of
-Feige's hard instances. Finally, we identify and correct a population-weighting
+We show that $(1-1/e)$-hardness survives backfire exactly. Finally, we
+identify and correct a population-weighting
 pathology in an existing isoelastic-welfare fairness objective that
 systematically under-protects small groups, and replace it with an
 egalitarian reweighting. We implement all of this in a control policy,
@@ -152,13 +150,12 @@ combine exactly two (Section~\ref{sec:related}).
   per-round decision from bisection with per-node value iteration to
   $O(Km+n\log n)$ -- an approximately $130\times$ speedup measured in this
   project's implementation.
-\item \textbf{Hardness results that preserve honest status labels}:
+\item \textbf{A hardness result that preserves honest status labels}:
   Theorem~\ref{thm:hardness} \emph{proves} that $(1-1/e)$-inapproximability
-  survives backfire exactly, for every fixed $\beta$; Proposition~\ref{prop:conditional}
-  is stated and discussed as a \emph{conditional, unproven} result --
-  consistent with its labeling in the underlying project notes -- suggesting
-  (not proving) a further constant-factor worsening contingent on one
-  plausible but unverified property of Feige's hard-instance construction.
+  survives backfire exactly, for every fixed $\beta$. A further,
+  $\beta$-dependent constant-factor worsening is numerically plausible but
+  remains an open conjecture, not a claimed result of this paper
+  (Section~\ref{sec:limitations}).
 \item \textbf{A corrected fairness mechanism}: we identify a measured
   population-weighting pathology in the isoelastic welfare objective
   of~\cite{rahmattalabi2021fair} (small groups are protected only once
@@ -583,34 +580,15 @@ This value formula also shows $f_\beta\ge f_0/2$ for \emph{every} seed set
 on this instance class at $q=0$, exactly where the sandwich ratio $\rho$ of
 Theorem~\ref{thm:sandwich} is vacuous ($\rho=0$).
 
-\begin{proposition}[Conditional -- not a theorem]
-\label{prop:conditional}
-Suppose Feige's NO-instances additionally satisfy: for every candidate
-$k$-subset $S$, the number of elements covered exactly once is at most
-$(1/e+\varepsilon)n$. Then no polynomial-time algorithm achieves ratio
-$c(\beta)(1-1/e)+\varepsilon'$, where
-\begin{equation}
-c(\beta)(1-1/e) = \frac1e + \Big(1-\frac2e\Big)\frac{\varphi_\beta(2)}{\varphi_\beta(1)}
-= (1-1/e) - \Big(1-\frac2e\Big)\frac{\beta(1-\beta)}{1+2\beta-\beta^2}.
-\end{equation}
-\end{proposition}
-Numerically $c(\beta)\approx0.968,0.946,0.939,0.940,0.960,0.981$ at
-$\beta=0.1,0.25,0.4,0.5,0.75,0.9$, worst near $\beta\approx0.45$, vanishing
-at both ends. \textbf{We flag this explicitly, and only, as a conditional
-result, exactly as it is labeled in the underlying project notes}: the
-extra property is not part of Feige's stated result, though it is
-plausible (a Chernoff/union-bound concentration argument for the
-"covered-exactly-once" statistic under a random partition), and two gaps
-remain -- (i) the analogous block-averaging step needs concavity of
-$d\mapsto\mathbb{E}\,\varphi_\beta(\mathrm{Bin}(d,1/k))$, unchecked; (ii)
-cross-terms from two sets in the same partition class need the reduction's
-pairwise-soundness property re-verified for this statistic. We report this
-as "very likely true, not yet proven," and do not use it as a premise for
-any theorem in this paper. Structural evidence -- a per-edge revive-at-least-as-fast-as-kill
-asymmetry, and several natural gadget constructions all failing for the
-same underlying reason -- suggests no super-constant worsening is
-achievable for fixed $\beta$, but this too is offered as evidence, not a
-proof.
+A natural next question is whether backfire forces a further,
+$\beta$-dependent worsening \emph{beyond} $1-1/e$. We do not claim such a
+result here: a candidate constant $c(\beta)\in[0.94,1)$ is derivable under
+one extra, unverified property of Feige's hard instances, but proving that
+property would require re-deriving part of Feige's reduction, which we
+have not done to a standard we are willing to publish as a theorem. We
+report this only as an open conjecture, with supporting (not conclusive)
+structural and numerical evidence, in
+Section~\ref{sec:limitations}.
 
 \section{Algorithm: MF-BWI-Fair}
 \label{sec:algorithm}
@@ -971,16 +949,30 @@ consistent with, but not confirmed by, the next limitation below.
 Broader real-network coverage and degree-distribution families beyond
 this one ego-network remain future work.
 
-\textbf{The conditional hardness result is exactly that.}
-Proposition~\ref{prop:conditional} is not a theorem: it depends on one
-plausible but unverified property of Feige's construction, and two
-identified technical gaps (a concavity step and a cross-term
-pairwise-soundness check) remain before it could become one. We report
-the qualitative structural evidence -- the revive-at-least-as-fast-as-kill
-asymmetry, and several gadget constructions all failing to encode a
-hard-to-decide dependence on the seed set -- as suggestive that no
-super-constant worsening exists for fixed $\beta$, not as a substitute for
-a proof.
+\textbf{A further backfire-dependent hardness worsening remains an open
+conjecture, deliberately not claimed as a result.} A candidate constant
+$c(\beta)\ge0.94$ (Section~\ref{sec:hardness}) would
+follow from one extra property of Feige's hard instances -- that the
+fraction of elements covered exactly once by any candidate solution is
+bounded by roughly $1/e$ -- which is plausible (a concentration argument
+over Feige's random-partition construction) but requires two technical
+steps we have not both closed: (i) a concavity property of
+$d\mapsto\mathbb{E}\,\varphi_\beta(\mathrm{Bin}(d,1/k))$, where
+$\varphi_\beta(c)=1/(2-(1-\beta)^c)$ is the exact per-element value
+function from Theorem~\ref{thm:hardness}'s proof; (ii) a cross-term
+pairwise-soundness property of the same reduction, re-verified for this
+statistic rather than for plain coverage. We checked (i) numerically --
+exhaustively across $\beta\in[0.01,0.99]$ and $k\in\{2,\dots,200\}$, it
+holds for every degree $d\le k$ (the regime Feige's construction uses) and
+only fails for $d\gtrsim4k$, well outside that regime -- which is genuine
+evidence, not a proof, since it does not establish the claim analytically
+and (ii) is a separate, deeper re-derivation of part of Feige's reduction
+that we have not attempted to a publishable standard. We therefore report
+this only as a conjecture with supporting structural evidence (the
+per-edge revive-at-least-as-fast-as-kill asymmetry noted in
+Section~\ref{sec:hardness}, and several natural gadget constructions all
+failing to encode a hard-to-decide dependence on the seed set) and the
+numerical check above, not as a theorem or a proposition of this paper.
 
 \textbf{No comparison against the original authors' code for He--Kempe or
 Rahmattalabi et al.} Neither paper has published code corresponding to the
@@ -1027,21 +1019,20 @@ closed-form index's exactness is verified numerically on random instances
 over a fine $\lambda$ grid, not established as a general theorem for this
 2-state/3-action case.
 
-\textbf{An open, unconditional route to a matching lower bound.} The
-underlying project notes identify, but do not pursue to completion, a
-possible unconditional alternative to Proposition~\ref{prop:conditional}:
-the class of functions $S\mapsto\sum_v\varphi(c_v(S))$ is closed under the
-same symmetrization used in Vondr{\'a}k's symmetry-gap
-framework~\cite{vondrak2013symmetry}, and the symmetric-instance gap for
-$\varphi_\beta$ (Theorem~\ref{thm:hardness}'s proof) works out numerically
-close to, and slightly below, Proposition~\ref{prop:conditional}'s
-constant. Whether Vondr{\'a}k's smoothing-step argument -- which uses
-submodularity directly -- extends to this non-submodular but structured
-class is open and was not checked; if it does, it would give an
-unconditional oracle-model lower bound without needing the unverified
-property Proposition~\ref{prop:conditional} depends on. We flag this as the
-single most promising next step toward turning Section~\ref{sec:hardness}'s
-conditional result into a proof.
+\textbf{An open, unconditional route to a matching lower bound.} We
+identify, but do not pursue to completion, a possible unconditional
+alternative to the conjectured constant above: the class of functions
+$S\mapsto\sum_v\varphi(c_v(S))$ is closed under the same symmetrization
+used in Vondr{\'a}k's symmetry-gap framework~\cite{vondrak2013symmetry},
+and the symmetric-instance gap for $\varphi_\beta$
+(Theorem~\ref{thm:hardness}'s proof) works out numerically close to, and
+slightly below, our conjectured $c(\beta)$. Whether Vondr{\'a}k's
+smoothing-step argument -- which uses submodularity directly -- extends to
+this non-submodular but structured class is open and was not checked; if
+it does, it would give an unconditional oracle-model lower bound without
+needing the unverified property the conjecture above depends on. We flag
+this as the single most promising next step toward a proof, should this
+line of work be pursued further.
 
 \section{Conclusion}
 
