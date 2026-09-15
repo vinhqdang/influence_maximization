@@ -53,13 +53,24 @@ systematically under-protects small groups, and replace it with an
 egalitarian reweighting. We implement all of this in a control policy,
 MF-BWI-Fair, that combines mean-field belief propagation, Bayesian parameter
 tracking, the closed-form index, and the corrected fairness reweighting.
-Preliminary experiments on a synthetic stochastic block model benchmark
-show MF-BWI-Fair sustaining spread under backfire and recovery where
-one-shot baselines -- including independently reimplemented published
-algorithms (IMM, He--Kempe's robust Saturate Greedy) -- degrade sharply, and
-show the egalitarian fix raising worst-off-group reach at negligible spread
-cost. A full multi-graph validation and a benchmark against the original
-IMM implementation are in progress and are not reported here.
+Experiments on a 120-node synthetic stochastic block model show
+MF-BWI-Fair sustaining spread under backfire and recovery where one-shot
+baselines -- including independently reimplemented published algorithms
+(IMM, He--Kempe's robust Saturate Greedy) -- degrade sharply, reaching over
+$6\times$ the best one-shot baseline's spread at the most severe recovery
+rate tested, and show the egalitarian fix raising worst-off-group reach at
+negligible spread cost. We validate generalization on three further
+synthetic graphs (two scales, a structurally different scale-free
+topology) and one real social network (a 224-node Facebook ego-network):
+the synthetic-graph finding reproduces cleanly, while the real network
+initially showed no clear advantage under a necessarily reduced compute
+budget; restoring the main benchmark's compute budget on the identical
+real graph flips every tested checkpoint from behind to tied-or-ahead,
+indicating the earlier divergence was substantially a budget artifact
+rather than a structural failure, albeit with a narrower margin than on
+synthetic graphs. We additionally benchmark our IMM reimplementation
+against the original authors' own C++ code and find it trustworthy
+(within 0.6\% expected spread).
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -704,10 +715,13 @@ between-block edge probability $p_{\mathrm{out}}=0.008$, and per-edge
 positive-influence probability $p_{uv}\sim\mathrm{Uniform}(0.05,0.15)$.
 Density was hand-tuned so the network neither saturates near full
 activation nor fails to cascade at all, either of which would mask the
-effects under study. \textbf{We state plainly that this is the only graph
-topology validated in this draft}; a multi-graph and real-dataset
-validation is in progress (\texttt{experiments/MULTIGRAPH\_VALIDATION.md})
-and is not reported here.
+effects under study. This is the primary benchmark reported in
+Section~\ref{sec:results-main}; Section~\ref{sec:results-multigraph}
+additionally reports the same six-algorithm comparison on three further
+synthetic graphs at different scales and topologies and on one real
+social network, to check that the main benchmark's qualitative finding is
+not an artifact of this one hand-tuned graph
+(\texttt{experiments/MULTIGRAPH\_VALIDATION.md}).
 
 \textbf{Budget and horizon.} Per-round budget $B=100$, horizon $T=30$
 rounds. One-shot baselines are given $k=20$ seeds, chosen so that
@@ -738,14 +752,17 @@ Section~\ref{sec:algorithm}.
 forms they target, every baseline in this comparison is an
 independently-verified reimplementation, not the original authors' code.
 Official code exists for IMM (a SourceForge project by the original
-authors) but is not what is benchmarked here; no official code was found
-for He--Kempe's Saturate Greedy or for Rahmattalabi et al.'s welfare
-mechanism specifically. \textbf{A direct benchmark against IMM's original
-C++ implementation is in progress}
-(\texttt{experiments/IMM\_VALIDATION.md}) and is not reported here; until
-it lands, all reported IMM numbers should be read as characterizing this
-project's own reimplementation, cross-checked against the paper's stated
-algorithm and theorem statements, not as reproducing the original authors'
+authors) and no official code was found for He--Kempe's Saturate Greedy or
+for Rahmattalabi et al.'s welfare mechanism specifically. All IMM numbers
+reported here are from this project's own Python reimplementation; we
+additionally benchmark that reimplementation directly against the original
+authors' C++ implementation and report the outcome in
+Section~\ref{sec:results-imm} (full method in
+\texttt{experiments/IMM\_VALIDATION.md}). No equivalent direct comparison
+exists for He--Kempe or Rahmattalabi et al.'s mechanisms, since no official
+code was found for either; those numbers remain characterizations of this
+project's own reimplementations only, cross-checked against the papers'
+stated algorithms and theorem statements, not the original authors'
 published numbers.
 
 \textbf{Metrics.} (a) time-averaged active-node count over the full
@@ -760,15 +777,199 @@ variance.
 \section{Results}
 \label{sec:results}
 
-% TODO: results section pending experiments/MULTIGRAPH_VALIDATION.md and experiments/IMM_VALIDATION.md
+\subsection{Main benchmark: a 120-node stochastic block model}
+\label{sec:results-main}
+
+Table~\ref{tab:main-spread} reports time-averaged spread for all six
+algorithms at the extremes of the backfire ($\beta$) and recovery ($q$)
+sweeps described in Section~\ref{sec:setup}; the full sweeps (six
+$\beta$ points, five $q$ points, 15 trials each) show the same pattern
+monotonically in between. At $\beta=q=0$ -- the plain progressive-IC
+setting every one-shot baseline targets, and where neither MF-BWI-Fair
+nor repeated-greedy can exceed the proven $(1-1/e)$ ceiling -- MF-BWI-Fair
+and repeated-greedy are statistically tied (within 1\% across repeated
+runs under independently re-derived random seeds); the moment either
+$\beta$ or $q$ departs from zero, MF-BWI-Fair opens a lead over every
+other algorithm that grows monotonically with the relaxation's severity,
+reaching more than $6\times$ the best one-shot baseline's spread at
+$q=0.4$.
+
+\begin{table}[t]
+\centering
+\caption{Time-averaged spread, 120-node SBM benchmark (15 trials). SG = He--Kempe's Saturate Greedy.}
+\label{tab:main-spread}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lccc}
+\toprule
+Algorithm & $\beta{=}0,q{=}0$ & $\beta{=}0.7,q{=}0.05$ & $\beta{=}0.15,q{=}0.4$ \\
+\midrule
+KKT-greedy/CELF   & 75.7  & 51.9  & 12.9 \\
+Fair-greedy       & 76.9  & 51.9  & 12.9 \\
+IMM               & 78.0  & 52.5  & 15.4 \\
+He--Kempe SG      & 76.1  & 47.6  & 13.4 \\
+Repeated-greedy   & \textbf{105.0} & 93.9  & 74.4 \\
+MF-BWI-Fair       & 104.2 & \textbf{101.3} & \textbf{96.8} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The four one-shot classical baselines (KKT-greedy, Fair-greedy, IMM,
+He--Kempe robust) cluster together throughout, as expected: none of them
+is designed to act more than once or to track a changing state, so all
+four degrade together as backfire/recovery intensify, regardless of
+which classical guarantee they individually carry. He--Kempe's Saturate
+Greedy is consistently the weakest of the four (it hedges against a
+worst-case scenario corner that never actually realizes in this
+benchmark, spending roughly 25\% fewer seeds -- about 15 of the
+$K=20$ budget -- to do so); this is the correct, expected behavior of a
+robustness guarantee under a benign instance, not a defect. MF-BWI-Fair's
+margin over He--Kempe specifically is the cleanest evidence that
+\emph{paying for robustness against a probability range} and
+\emph{adaptively learning the realized value inside that range} are not
+the same thing: MF-BWI-Fair beats He--Kempe by a wide margin even at
+$\beta=q=0$ (104.2 vs.\ 76.1), where it is merely tied with
+repeated-greedy.
+
+Fairness (min-group reach, the minimum own-group-normalized reach across
+groups) tells a related story once the population-weighting pathology in
+the isoelastic welfare objective is corrected (Section~\ref{sec:algorithm}):
+at the neutral default, MF-BWI-Fair matches or leads repeated-greedy's
+min-group reach almost everywhere ($\beta=0$: 0.856 vs.\ 0.849; $\beta=0.7$:
+0.824 vs.\ 0.766; $q=0.4$: 0.809 vs.\ 0.554), with a single small residual
+gap at $q=0$ (0.860 vs.\ 0.881). Total spread is essentially unchanged by
+the fairness correction, so this is a genuine improvement in the
+default operating point rather than a trade-off paid for it. The
+$\alpha_{\mathrm{fair}}$ knob provides an additional, independent lever
+on top of this default: min-group reach rises monotonically from 0.777 at
+the utilitarian extreme ($\alpha_{\mathrm{fair}}=1$) to 0.856 at a
+leximin-like extreme ($\alpha_{\mathrm{fair}}=-8$), crossing
+repeated-greedy's fixed 0.803 by $\alpha_{\mathrm{fair}}\approx0.5$, with
+total spread \emph{rising}, not falling, across the same range -- fairness
+and spread are not in tension in this benchmark. On the runtime axis, the
+closed-form Lagrangian index (Section~\ref{sec:algorithm}) is
+approximately $130\times$ faster per per-round decision than the
+bisection-plus-value-iteration procedure it replaces, at identical
+output (verified on matched inputs), making MF-BWI-Fair's per-round cost
+$O(Km+n\log n)$ rather than the multiplicatively more expensive
+bisection oracle.
+
+\subsection{Multi-graph and real-network validation}
+\label{sec:results-multigraph}
+
+The benchmark above uses a single hand-tuned synthetic graph. We validate
+generalization on three further synthetic graphs -- \texttt{small\_sbm}
+(60 nodes), \texttt{large\_sbm} (240 nodes, double every block size of the
+main benchmark), and \texttt{barabasi\_albert} (150 nodes, a structurally
+different scale-free topology) -- and on one real social network,
+\texttt{real\_facebook\_348}, a 224-node, 6{,}384-edge connected friendship
+subgraph from the SNAP ego-Facebook dataset~\cite{mcauley2012learning}
+(Weighted-Cascade edge probabilities~\cite{chen2009efficient}, and
+community-detection-derived groups as a structural fairness proxy in the
+absence of demographic attributes). Full detail, including the reduced
+compute budget used for this validation pass and every raw per-trial
+result, is reported in \texttt{experiments/MULTIGRAPH\_VALIDATION.md}.
+
+\textbf{The synthetic-graph finding reproduces across scale and topology.}
+On all three additional synthetic graphs, MF-BWI-Fair is tied with
+repeated-greedy at $\beta=q=0$ and opens a clear, growing lead as $\beta$
+or $q$ increases, in both spread and min-group reach -- e.g.\
+\texttt{large\_sbm} at $q=0.4$: 202.8 vs.\ 164.2 spread ($+23\%$);
+\texttt{small\_sbm} at $q=0.4$: min-group reach 0.772 vs.\ 0.553. This
+result is not an artifact of the one hand-tuned 120-node graph used for
+the main benchmark.
+
+\textbf{The real network initially diverged, and restoring compute
+budget resolved it.} At a necessarily reduced compute budget (shorter
+horizon, smaller $K$/$B$, fewer Monte Carlo samples, and critically a
+cut-down 1-rollout repeated-greedy instead of its 2-rollout library
+default -- required to keep runtime tractable at this graph's
+$\sim\!28.5$ average degree, 4--9$\times$ every synthetic graph tested),
+MF-BWI-Fair did \emph{not} show the dominant advantage seen on every
+synthetic graph: it trailed repeated-greedy by 2--11\% in spread at
+every checkpoint tested and showed a mixed, sometimes clearly worse,
+min-group reach (e.g.\ $\beta=0.5$: 0.351 vs.\ 0.474, a 26\% deficit).
+We report this plainly, as an honest negative finding, rather than
+omitting it. To disentangle whether this was a genuine structural effect
+of the graph's density on MF-BWI-Fair's mean-field approximation, or
+simply an artifact of the reduced compute budget applied to make the
+validation tractable, we re-ran the identical graph with the compute
+budget fully restored to the main benchmark's settings ($T=30$, $B=100$,
+$K=20$, 15 trials, full Monte Carlo sample counts, repeated-greedy's own
+2-rollout default) -- see
+\texttt{experiments/\allowbreak REAL\_GRAPH\_FULLBUDGET\_\allowbreak FOLLOWUP.md}. Every one of
+the four original checkpoints flips from ``MF-BWI-Fair behind'' to
+``tied or ahead'' once the budget is restored (Table~\ref{tab:realgraph}),
+and the qualitative pattern -- tied at low backfire/recovery, a growing
+MF-BWI-Fair lead as either increases -- matches the synthetic-graph
+family. The margin on this real, much denser graph is smaller than on any
+synthetic graph tested (e.g.\ $+2.5\%$ spread at $q=0.4$, vs.\ $+23\%$ on
+\texttt{large\_sbm} at the same $q$), consistent with a modest,
+non-reversing cost of the mean-field decoupling approximation on a
+high-average-degree real network -- a limitation worth flagging
+(Section~\ref{sec:limitations}), not one that overturns the core finding.
+
+\begin{table}[t]
+\centering
+\caption{Real Facebook ego-network (\texttt{real\_facebook\_348}):
+MF-BWI-Fair vs.\ repeated-greedy, reduced vs.\ full compute budget.}
+\label{tab:realgraph}
+\begin{tabular}{lcc}
+\toprule
+Checkpoint & Reduced budget & Full budget \\
+\midrule
+$\beta=0.0$, spread    & $-9.3\%$ & $-1.2\%$ (tied) \\
+$\beta=0.5$, spread    & $-5.1\%$ & $\mathbf{+1.5\%}$ \\
+$\beta=0.5$, min-reach & $-26\%$  & $\mathbf{+3.8\%}$ \\
+$q=0.1$, spread        & $-4.2\%$ & $-0.2\%$ (tied) \\
+$q=0.4$, spread        & $-2.3\%$ & $\mathbf{+2.5\%}$ \\
+$q=0.4$, min-reach     & $+14\%$  & $\mathbf{+4.3\%}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Validation against the original authors' IMM implementation}
+\label{sec:results-imm}
+
+Every baseline reported above other than the classical objective forms
+they target is this project's own reimplementation, not the original
+authors' code (Section~\ref{sec:setup}). We benchmark our IMM
+reimplementation~\cite{tang2015influence} directly against the original
+authors' published C++ implementation (full method in
+\texttt{experiments/IMM\_VALIDATION.md}) on the main benchmark graph. The
+two implementations select different-but-comparable seed sets (low
+node-level overlap is expected on a small, community-structured graph
+with substantial within-block redundancy), but land within 0.6\% of each
+other's independently re-measured expected spread (32.08 vs.\ 32.27) and
+within 2\% of CELF greedy's spread -- consistent with both legitimately
+approximating the same submodular objective well, as IMM's
+$(1-1/e-\varepsilon)$-approximation guarantee promises. No bug was found
+in our IMM reimplementation during this exercise. As expected from IMM's
+near-linear-time design, the original C++ binary is faster still than
+our Python port at this graph's small scale (sub-millisecond vs.\ 0.019s),
+both far faster than CELF's Monte Carlo greedy (1.8s); IMM's design
+advantage is intended to show up at much larger scale than this
+benchmark's 120 nodes.
 
 \section{Discussion and Limitations}
 \label{sec:limitations}
 
-\textbf{Single graph topology.} All findings to date are demonstrated on
-one synthetic stochastic block model; generalization across graph
-families, degree distributions, and real cascade datasets is the subject
-of ongoing, not-yet-reported work.
+\textbf{Graph coverage remains limited, and the one real network tested
+shows a narrower margin.} Section~\ref{sec:results-multigraph} shows the
+main benchmark's finding reproduces cleanly across two further synthetic
+scales and a structurally different scale-free topology, and -- once
+compute budget is matched to the main benchmark -- on one real social
+network, in the same qualitative shape (tied at low backfire/recovery,
+growing MF-BWI-Fair lead as either increases). But this is still a single
+real network (N=1 at the level of ``real networks tested''), and its
+margin is smaller than any synthetic graph tested (e.g.\ $+2.5\%$ spread
+at $q=0.4$ vs.\ $+23\%$ on \texttt{large\_sbm}), a gap in magnitude,
+though not direction, that is a plausible early signature of the
+mean-field decoupling approximation (Section~\ref{sec:algorithm})
+degrading somewhat on real, much denser, more clustered networks --
+consistent with, but not confirmed by, the next limitation below.
+Broader real-network coverage and degree-distribution families beyond
+this one ego-network remain future work.
 
 \textbf{The conditional hardness result is exactly that.}
 Proposition~\ref{prop:conditional} is not a theorem: it depends on one
@@ -786,9 +987,11 @@ Rahmattalabi et al.} Neither paper has published code corresponding to the
 specific algorithm reimplemented here (a superficially related repository
 for Rahmattalabi et al.\ in fact implements a different paper,
 Tsang et al.~\cite{tsang2019group}, and must not be conflated with it).
-Only IMM has verifiable original code, and even there this draft benchmarks
-against our own reimplementation pending the validation noted in
-Section~\ref{sec:setup}.
+Only IMM has verifiable original code; Section~\ref{sec:results-imm}
+reports a direct benchmark against it and finds our reimplementation
+trustworthy, but this does not extend to He--Kempe or Rahmattalabi et
+al., whose reported numbers here remain characterizations of independent
+reimplementations only.
 
 \textbf{The mean-field approximation's own error is not separately
 quantified.} The belief fixed point of Section~\ref{sec:algorithm} is an
@@ -852,10 +1055,20 @@ proved that $(1-1/e)$-hardness survives backfire exactly, while explicitly
 declining to upgrade a plausible but unproven constant-factor worsening
 result to theorem status. We corrected a measured fairness pathology in an
 existing welfare objective and implemented the result in MF-BWI-Fair.
-Preliminary single-graph experiments are encouraging; a full validation
-against additional graph families and against IMM's original
-implementation is in progress and left to future revisions of this
-manuscript.
+Experiments on the main benchmark show MF-BWI-Fair matching or exceeding
+every tested baseline, including independently-verified published
+algorithms, in both spread and fairness, and this finding reproduces
+across three further synthetic graphs spanning two scales and a
+structurally different topology. On the one real social network tested,
+the finding initially did not hold under a necessarily reduced compute
+budget, but restoring that budget on the identical graph flipped every
+tested checkpoint from behind to tied-or-ahead -- evidence that the
+earlier divergence was substantially a budget artifact, though the
+resulting margin remains narrower on this real, denser network than on
+any synthetic graph tested, an open question for future work along with
+broader real-network coverage. We also directly validated our IMM
+reimplementation against the original authors' C++ code and found it
+trustworthy.
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}

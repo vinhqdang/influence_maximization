@@ -245,6 +245,16 @@ Q.~Fang, J.~Shi, X.~Rui, J.~Zhang, and Z.~Wang, ``Scalable fair influence
   blocking maximization via approximately monotonic submodular optimization,''
   2026.
 
+\bibitem{mcauley2012learning}
+J.~McAuley and J.~Leskovec, ``Learning to discover social circles in ego
+  networks,'' in \emph{Advances in Neural Information Processing Systems
+  (NIPS)}, vol.~25, 2012.
+
+\bibitem{chen2009efficient}
+W.~Chen, Y.~Wang, and S.~Yang, ``Efficient influence maximization in social
+  networks,'' in \emph{Proceedings of the 15th ACM SIGKDD International
+  Conference on Knowledge Discovery and Data Mining (KDD)}, 2009.
+
 \bibitem{vondrak2013symmetry}
 J.~Vondr{\'a}k, ``Symmetry and approximability of submodular maximization
   problems,'' \emph{SIAM Journal on Computing}, vol.~42, no.~1, 2013.
