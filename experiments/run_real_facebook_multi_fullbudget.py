@@ -49,16 +49,15 @@ RESULTS_ROOT = os.path.join(os.path.dirname(__file__), "results_multigraph")
 # rounds x 2 sims, i.e. simply not overridden). Only p_plus assignment
 # (Weighted Cascade, fixed) and the community-detection group assignment are
 # graph-specific -- everything else matches the main benchmark exactly.
+# real_facebook_3437_fullbudget is delegated to a separate Colab VM (see
+# /tmp/colab_run_3437.py, not checked in -- it is a throwaway copy of this
+# same checkpoint logic restricted to just that one graph) to run in
+# parallel with this process; it is deliberately NOT in this GRAPHS list so
+# this process does not redundantly recompute it once it finishes 686.
 GRAPHS = [
     dict(
         name="real_facebook_686_fullbudget",
         build_graph=build_real_facebook_686,
-        beta_sweep_q=0.05, q_sweep_beta=0.15, alpha_sweep_beta=0.15, alpha_sweep_q=0.1,
-        q_values=(0.0, 0.05, 0.1, 0.2, 0.4),
-    ),
-    dict(
-        name="real_facebook_3437_fullbudget",
-        build_graph=build_real_facebook_3437,
         beta_sweep_q=0.05, q_sweep_beta=0.15, alpha_sweep_beta=0.15, alpha_sweep_q=0.1,
         q_values=(0.0, 0.05, 0.1, 0.2, 0.4),
     ),
