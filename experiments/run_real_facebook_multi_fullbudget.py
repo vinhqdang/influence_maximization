@@ -29,8 +29,16 @@ import json
 import os
 import time
 
+import numpy as np
+
 import multigraph_common as MC
 from im_lab import graphs
+from im_lab.baselines.fair_greedy import fair_welfare_greedy
+from im_lab.baselines.imm import imm_select
+from im_lab.baselines.kkt_greedy import celf_greedy
+from im_lab.baselines.robust_kempe import robust_select
+from im_lab.simulator import true_params_from_graph
+from multigraph_common import _assign_params
 from run_multigraph_validation import (
     ALGO_COLORS,
     ALGO_LABELS,
@@ -149,6 +157,63 @@ def _read_rows(path):
         return rows
 
 
+def _compute_baseline_seed_sets_resumable(G, config, trial_seed, entry, ckpt, ckpt_path):
+    """Byte-identical to MC.compute_baseline_seed_sets, but checkpointed after
+    each of the 4 one-shot algorithms individually instead of only once all 4
+    finish. On the larger real graphs this whole step costs more than a
+    single sweep cell, so per-trial-only checkpointing left it vulnerable to
+    never landing within one container lifetime in this environment (which
+    can be reclaimed with no warning at any time) -- per-algorithm
+    checkpointing means a resume only re-does whichever algorithm(s) didn't
+    finish yet, not all 4."""
+    partial = entry.setdefault("seed_sets_partial", {})
+    _assign_params(G, config, q_range=(config.BETA_SWEEP_Q, config.BETA_SWEEP_Q), trial_seed=trial_seed)
+    p_plus, _q = true_params_from_graph(G)
+    group_of = graphs.group_of_map(G)
+
+    if "kkt_greedy" not in partial:
+        seeds_kkt, _ = celf_greedy(
+            G, p_plus, k=config.K, num_sims=config.CELF_NUM_SIMS,
+            rng=np.random.default_rng(MC.context_seed(config.name, "kkt_select", trial_seed)),
+        )
+        partial["kkt_greedy"] = list(seeds_kkt)
+        _save_checkpoint(ckpt, ckpt_path)
+
+    if "fair_greedy" not in partial:
+        seeds_fair, _w, _reach = fair_welfare_greedy(
+            G, p_plus, k=config.K, group_of=group_of, num_sims=config.FAIR_NUM_SIMS,
+            rng=np.random.default_rng(MC.context_seed(config.name, "fair_select", trial_seed)),
+        )
+        partial["fair_greedy"] = list(seeds_fair)
+        _save_checkpoint(ckpt, ckpt_path)
+
+    if "imm" not in partial:
+        seeds_imm = imm_select(
+            G, p_plus, k=config.K, epsilon=config.IMM_EPSILON,
+            rng=np.random.default_rng(MC.context_seed(config.name, "imm_select", trial_seed)),
+        )
+        partial["imm"] = list(seeds_imm)
+        _save_checkpoint(ckpt, ckpt_path)
+
+    if "robust_kempe" not in partial:
+        if config.p_plus_mode == "range":
+            edges = list(G.edges())
+            scenario_low = {e: config.p_plus_range[0] for e in edges}
+            scenario_high = {e: config.p_plus_range[1] for e in edges}
+        else:
+            scenario_low = dict(p_plus)
+            scenario_high = {e: 0.5 * p for e, p in p_plus.items()}
+        seeds_robust = robust_select(
+            G, [scenario_low, scenario_high], k=config.K,
+            gamma=config.ROBUST_KEMPE_GAMMA, num_sims=config.ROBUST_KEMPE_NUM_SIMS,
+            rng=np.random.default_rng(MC.context_seed(config.name, "robust_select", trial_seed)),
+        )
+        partial["robust_kempe"] = list(seeds_robust)
+        _save_checkpoint(ckpt, ckpt_path)
+
+    return dict(partial)
+
+
 def _run_sweep_resumable(config, build_G, sweep_name, csv_path, values, value_fn, ckpt, ckpt_path, t_start):
     sweep_ckpt = ckpt[sweep_name]
     for trial in range(config.N_TRIALS):
@@ -156,7 +221,8 @@ def _run_sweep_resumable(config, build_G, sweep_name, csv_path, values, value_fn
         entry = sweep_ckpt.setdefault(key, {"seed_sets": None, "done": []})
         trial_seed = MC.context_seed(config.name, "trial_seed", sweep_name, trial)
         if entry["seed_sets"] is None:
-            entry["seed_sets"] = MC.compute_baseline_seed_sets(build_G(), config, trial_seed)
+            entry["seed_sets"] = _compute_baseline_seed_sets_resumable(build_G(), config, trial_seed, entry, ckpt, ckpt_path)
+            entry.pop("seed_sets_partial", None)
             _save_checkpoint(ckpt, ckpt_path)
         seed_sets = entry["seed_sets"]
         done = set(entry["done"])
