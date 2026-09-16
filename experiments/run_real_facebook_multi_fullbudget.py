@@ -49,15 +49,26 @@ RESULTS_ROOT = os.path.join(os.path.dirname(__file__), "results_multigraph")
 # rounds x 2 sims, i.e. simply not overridden). Only p_plus assignment
 # (Weighted Cascade, fixed) and the community-detection group assignment are
 # graph-specific -- everything else matches the main benchmark exactly.
-# real_facebook_3437_fullbudget is delegated to a separate Colab VM (see
-# /tmp/colab_run_3437.py, not checked in -- it is a throwaway copy of this
-# same checkpoint logic restricted to just that one graph) to run in
-# parallel with this process; it is deliberately NOT in this GRAPHS list so
-# this process does not redundantly recompute it once it finishes 686.
+# A parallel-Colab-VM attempt for real_facebook_3437_fullbudget (see
+# /tmp/colab_run_3437.py, not checked in) was abandoned: measured throughput
+# there was roughly 300-350s per (trial, swept-value) cell vs. ~17-19s/cell
+# on this environment for the smaller/less-dense real_facebook_686_fullbudget
+# -- a ~16-18x slowdown, evidently a heavily shared/throttled free-tier vCPU,
+# not merely 3437's larger size (which alone would predict a much smaller
+# slowdown). 3437 therefore runs sequentially in-process here, after 686,
+# same as the original design; its small partial progress from the aborted
+# Colab attempt (4/240 cells) is preserved in its checkpoint.json and this
+# resumes from there.
 GRAPHS = [
     dict(
         name="real_facebook_686_fullbudget",
         build_graph=build_real_facebook_686,
+        beta_sweep_q=0.05, q_sweep_beta=0.15, alpha_sweep_beta=0.15, alpha_sweep_q=0.1,
+        q_values=(0.0, 0.05, 0.1, 0.2, 0.4),
+    ),
+    dict(
+        name="real_facebook_3437_fullbudget",
+        build_graph=build_real_facebook_3437,
         beta_sweep_q=0.05, q_sweep_beta=0.15, alpha_sweep_beta=0.15, alpha_sweep_q=0.1,
         q_values=(0.0, 0.05, 0.1, 0.2, 0.4),
     ),
