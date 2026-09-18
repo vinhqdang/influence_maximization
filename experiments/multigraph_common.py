@@ -225,26 +225,40 @@ def run_baseline_forward(G, config: GraphConfig, seed_set, true_beta, q_range, t
 
 
 def run_mfbwi_forward(G, config: GraphConfig, true_beta, alpha_fair, q_range, trial_seed, sweep, param):
+    """Run T+1 rounds and drop the first round's output before returning, so
+    the returned trajectory's index 0 is the state AFTER the policy's first
+    (round-0-equivalent) seeding decision -- exactly parallel to a one-shot
+    baseline's `initial_state(G, seed_set)`, whose seeds are already active
+    at trajectory[0] and start influencing neighbours from round 1 onward.
+    Without this, a one-shot baseline's seeds get a full extra round of
+    influence propagation credited into time_avg_spread relative to
+    MF-BWI-Fair/repeated_greedy, which must spend their own round 1
+    converting the same nodes -- see REAL_GRAPH_N3_FOLLOWUP.md Section 5.1
+    for the diagnosis that led to this fix (it does not change either
+    algorithm's control logic, only removes an unintended one-round
+    head-start that only the one-shot baselines were getting)."""
     _assign_params(G, config, q_range=q_range, trial_seed=trial_seed)
     t0 = time.perf_counter()
     result = run_mf_bwi_fair(
-        G, true_beta=true_beta, T=config.T, budget=config.B, alpha_fair=alpha_fair,
+        G, true_beta=true_beta, T=config.T + 1, budget=config.B, alpha_fair=alpha_fair,
         seed=context_seed(config.name, "mfbwi_forward", sweep, param, trial_seed),
     )
     runtime = time.perf_counter() - t0
-    return result["trajectory"], runtime
+    return result["trajectory"][1:], runtime
 
 
 def run_repeatedgreedy_forward(G, config: GraphConfig, true_beta, q_range, trial_seed, sweep, param):
+    """Runs T+1 rounds and drops the first round's output -- see
+    run_mfbwi_forward's docstring for why."""
     _assign_params(G, config, q_range=q_range, trial_seed=trial_seed)
     t0 = time.perf_counter()
     result = run_repeated_greedy(
-        G, true_beta=true_beta, T=config.T, budget=config.B,
+        G, true_beta=true_beta, T=config.T + 1, budget=config.B,
         lookahead_rounds=config.REPEATED_GREEDY_LOOKAHEAD, num_sims=config.REPEATED_GREEDY_NUM_SIMS,
         seed=context_seed(config.name, "repeated_forward", sweep, param, trial_seed),
     )
     runtime = time.perf_counter() - t0
-    return result["trajectory"], runtime
+    return result["trajectory"][1:], runtime
 
 
 def metrics_row(sweep, param, algo, trial, trajectory, group_of, group_sizes, runtime_s, n_seeds=None):

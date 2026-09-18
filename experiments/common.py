@@ -258,24 +258,36 @@ def run_baseline_forward(G, seed_set, true_beta, q_range, trial_seed, algo, swee
 
 
 def run_mfbwi_forward(G, true_beta, budget, alpha_fair, q_range, trial_seed, sweep, param, T=T) -> tuple[list, float]:
+    """Run T+1 rounds and drop the first round's output before returning, so
+    the returned trajectory's index 0 is the state AFTER the policy's first
+    (round-0-equivalent) seeding decision -- exactly parallel to a one-shot
+    baseline's `initial_state(G, seed_set)`, whose seeds are already active
+    at trajectory[0] and start influencing neighbours from round 1 onward.
+    Without this, a one-shot baseline's seeds get a full extra round of
+    influence propagation credited into time_avg_spread relative to
+    MF-BWI-Fair/repeated_greedy, which must spend their own round 1
+    converting the same nodes (see REAL_GRAPH_N3_FOLLOWUP.md Section 5.1 for
+    the diagnosis and experiments/multigraph_common.py's twin fix)."""
     graphs.assign_true_parameters(G, p_plus_range=P_PLUS_RANGE, q_range=q_range, seed=trial_seed)
     t0 = time.perf_counter()
     result = run_mf_bwi_fair(
-        G, true_beta=true_beta, T=T, budget=budget, alpha_fair=alpha_fair,
+        G, true_beta=true_beta, T=T + 1, budget=budget, alpha_fair=alpha_fair,
         seed=context_seed("mfbwi_forward", sweep, param, trial_seed),
     )
     runtime = time.perf_counter() - t0
-    return result["trajectory"], runtime
+    return result["trajectory"][1:], runtime
 
 
 def run_repeatedgreedy_forward(G, true_beta, budget, q_range, trial_seed, sweep, param, T=T) -> tuple[list, float]:
     """Full T-round repeated_greedy run (acts every round, no alpha_fair --
-    see module docstring above and im_lab/baselines/repeated_greedy.py)."""
+    see module docstring above and im_lab/baselines/repeated_greedy.py).
+    Runs T+1 rounds and drops the first round's output -- see
+    run_mfbwi_forward's docstring for why."""
     graphs.assign_true_parameters(G, p_plus_range=P_PLUS_RANGE, q_range=q_range, seed=trial_seed)
     t0 = time.perf_counter()
     result = run_repeated_greedy(
-        G, true_beta=true_beta, T=T, budget=budget,
+        G, true_beta=true_beta, T=T + 1, budget=budget,
         seed=context_seed("repeated_forward", sweep, param, trial_seed),
     )
     runtime = time.perf_counter() - t0
-    return result["trajectory"], runtime
+    return result["trajectory"][1:], runtime
