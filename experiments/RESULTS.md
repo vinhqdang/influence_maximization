@@ -4,6 +4,47 @@ This is the write-up for `experiments/run_comparison.py` (shared setup/helpers i
 `experiments/common.py`). Raw per-trial data: `experiments/results/*.csv`. Plots:
 `experiments/results/*.png`.
 
+## Harness-fix validation (post one-round-head-start fix)
+
+A bug was found in the shared evaluation harness (`experiments/common.py`,
+`experiments/multigraph_common.py`): one-shot baselines (`kkt_greedy`,
+`fair_greedy`, `imm`, `robust_kempe`) had their seed set pre-marked active in
+`trajectory[0]` before round 1, while the sequential policies (MF-BWI-Fair,
+`repeated_greedy`) started all-inactive and spent their own round 1 seeding --
+a one-round head start for the one-shot baselines not available to the
+sequential methods. This was fixed by running the sequential policies for
+`T+1` rounds and dropping the first round's output, giving them the same
+"seed active at t=0" convention already used for the one-shot baselines.
+
+The full 15-trial x 16-value (240-cell) sweep below was re-run end to end
+under the fixed harness (`experiments/run_main_study_fullbudget.py`, raw data
+in `experiments/results_multigraph/main_study_fullbudget/`). Result: **on
+this graph, the fix changes nothing outside noise.** Aggregate MF-BWI-Fair
+vs. one-shot-baseline ratios, old (buggy) vs. new (fixed) harness:
+
+| sweep | vs kkt_greedy | vs fair_greedy | vs imm | vs robust_kempe |
+|---|---|---|---|---|
+| beta  | 1.61x -> 1.65x | 1.59x -> 1.62x | 1.57x -> 1.63x | 1.67x -> 1.73x |
+| q     | 1.97x -> 2.02x | 1.94x -> 2.01x | 1.91x -> 1.96x | 2.04x -> 2.07x |
+| alpha | 1.80x -> 1.74x | 1.78x -> 1.77x | 1.73x -> 1.76x | 1.82x -> 1.90x |
+
+The specific severe-regime point the manuscript cites as ">6x" (q=0.4,
+MF-BWI-Fair vs. IMM): 99.45 vs. 15.39 (6.46x) under the buggy harness, 101.96
+vs. 15.71 (6.49x) under the fixed one -- unchanged.
+
+Why this graph is insensitive to a bug that *did* move the numbers
+substantially on the larger real-world graph (see
+`REAL_GRAPH_N3_FOLLOWUP.md` Section 5, 3437-node graph: gap 5.5% -> 1.71%
+after the same fix): this study's graph is small (120 nodes) and dense
+enough, with `T=30` rounds, to reach near-saturation well within the
+horizon, so one extra "free" seeding round is a small fraction of the total
+dynamics. The 3437-node real graph is far sparser and needs proportionally
+more rounds to propagate, so the same one-round head start is a much larger
+fraction of its dynamics -- hence the bug's effect scales with graph
+size/sparsity rather than being a fixed offset. All numbers in the tables
+below predate the fix but are validated as unaffected by it; the
+post-fix CSVs/plots are the ones under `results_multigraph/main_study_fullbudget/`.
+
 ## Setup
 
 - **Graph**: one fixed Stochastic Block Model, 3 groups of unequal size
