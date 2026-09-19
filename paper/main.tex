@@ -61,16 +61,20 @@ $6\times$ the best one-shot baseline's spread at the most severe recovery
 rate tested, and show the egalitarian fix raising worst-off-group reach at
 negligible spread cost. We validate generalization on three further
 synthetic graphs (two scales, a structurally different scale-free
-topology) and one real social network (a 224-node Facebook ego-network):
-the synthetic-graph finding reproduces cleanly, while the real network
-initially showed no clear advantage under a necessarily reduced compute
-budget; restoring the main benchmark's compute budget on the identical
-real graph flips every tested checkpoint from behind to tied-or-ahead,
-indicating the earlier divergence was substantially a budget artifact
-rather than a structural failure, albeit with a narrower margin than on
-synthetic graphs. We additionally benchmark our IMM reimplementation
-against the original authors' own C++ code and find it trustworthy
-(within 0.6\% expected spread).
+topology) and three real social networks at increasing scale (224,
+168, and 532-node Facebook ego-networks): the synthetic-graph finding
+reproduces cleanly, and an initial real-network divergence traced to two
+causes -- an insufficient compute budget and a harness bug that gave
+one-shot baselines an unearned one-round propagation head start over
+MF-BWI-Fair and a repeated-greedy baseline -- is resolved once both are
+fixed, restoring MF-BWI-Fair's lead over every one-shot classical
+baseline at all three real-graph scales; the sole disclosed exception is
+a small, stable margin behind the more expensive repeated-greedy rollout
+baseline on the largest real graph, attributed to a genuine ramp-up-speed
+cost of the mean-field relaxation on richer community structure rather
+than the harness artifact. We additionally benchmark our IMM
+reimplementation against the original authors' own C++ code and find it
+trustworthy (within 0.6\% expected spread).
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -841,14 +845,19 @@ The benchmark above uses a single hand-tuned synthetic graph. We validate
 generalization on three further synthetic graphs -- \texttt{small\_sbm}
 (60 nodes), \texttt{large\_sbm} (240 nodes, double every block size of the
 main benchmark), and \texttt{barabasi\_albert} (150 nodes, a structurally
-different scale-free topology) -- and on one real social network,
-\texttt{real\_facebook\_348}, a 224-node, 6{,}384-edge connected friendship
-subgraph from the SNAP ego-Facebook dataset~\cite{mcauley2012learning}
-(Weighted-Cascade edge probabilities~\cite{chen2009efficient}, and
-community-detection-derived groups as a structural fairness proxy in the
-absence of demographic attributes). Full detail, including the reduced
-compute budget used for this validation pass and every raw per-trial
-result, is reported in \texttt{experiments/MULTIGRAPH\_VALIDATION.md}.
+different scale-free topology) -- and on three real social networks at
+increasing scale, all connected friendship subgraphs from the SNAP
+ego-Facebook dataset~\cite{mcauley2012learning}: \texttt{real\_facebook\_348}
+(224 nodes, 6{,}384 edges), \texttt{real\_facebook\_686} (168 nodes,
+3{,}312 edges), and \texttt{real\_facebook\_3437} (532 nodes, 9{,}624
+edges, the sparsest and most community-structured of the three, with 6
+detected communities of sizes 39--165) (Weighted-Cascade edge
+probabilities~\cite{chen2009efficient}, and community-detection-derived
+groups as a structural fairness proxy in the absence of demographic
+attributes). Full detail, including every raw per-trial result, is
+reported in \texttt{experiments/MULTIGRAPH\_VALIDATION.md},
+\texttt{experiments/REAL\_GRAPH\_FULLBUDGET\_FOLLOWUP.md}, and
+\texttt{experiments/REAL\_GRAPH\_N3\_FOLLOWUP.md}.
 
 \textbf{The synthetic-graph finding reproduces across scale and topology.}
 On all three additional synthetic graphs, MF-BWI-Fair is tied with
@@ -859,40 +868,68 @@ or $q$ increases, in both spread and min-group reach -- e.g.\
 result is not an artifact of the one hand-tuned 120-node graph used for
 the main benchmark.
 
-\textbf{The real network initially diverged, and restoring compute
-budget resolved it.} At a necessarily reduced compute budget (shorter
-horizon, smaller $K$/$B$, fewer Monte Carlo samples, and critically a
-cut-down 1-rollout repeated-greedy instead of its 2-rollout library
-default -- required to keep runtime tractable at this graph's
-$\sim\!28.5$ average degree, 4--9$\times$ every synthetic graph tested),
-MF-BWI-Fair did \emph{not} show the dominant advantage seen on every
-synthetic graph: it trailed repeated-greedy by 2--11\% in spread at
-every checkpoint tested and showed a mixed, sometimes clearly worse,
-min-group reach (e.g.\ $\beta=0.5$: 0.351 vs.\ 0.474, a 26\% deficit).
-We report this plainly, as an honest negative finding, rather than
-omitting it. To disentangle whether this was a genuine structural effect
-of the graph's density on MF-BWI-Fair's mean-field approximation, or
-simply an artifact of the reduced compute budget applied to make the
-validation tractable, we re-ran the identical graph with the compute
-budget fully restored to the main benchmark's settings ($T=30$, $B=100$,
-$K=20$, 15 trials, full Monte Carlo sample counts, repeated-greedy's own
-2-rollout default) -- see
-\texttt{experiments/\allowbreak REAL\_GRAPH\_FULLBUDGET\_\allowbreak FOLLOWUP.md}. Every one of
-the four original checkpoints flips from ``MF-BWI-Fair behind'' to
-``tied or ahead'' once the budget is restored (Table~\ref{tab:realgraph}),
-and the qualitative pattern -- tied at low backfire/recovery, a growing
-MF-BWI-Fair lead as either increases -- matches the synthetic-graph
-family. The margin on this real, much denser graph is smaller than on any
-synthetic graph tested (e.g.\ $+2.5\%$ spread at $q=0.4$, vs.\ $+23\%$ on
-\texttt{large\_sbm} at the same $q$), consistent with a modest,
-non-reversing cost of the mean-field decoupling approximation on a
-high-average-degree real network -- a limitation worth flagging
-(Section~\ref{sec:limitations}), not one that overturns the core finding.
+\textbf{The real network initially diverged; restoring compute budget and
+fixing a harness bug both mattered, and together resolve it.} At a
+necessarily reduced compute budget (shorter horizon, smaller $K$/$B$,
+fewer Monte Carlo samples, and critically a cut-down 1-rollout
+repeated-greedy instead of its 2-rollout library default -- required to
+keep runtime tractable at \texttt{real\_facebook\_348}'s $\sim\!28.5$
+average degree, 4--9$\times$ every synthetic graph tested), MF-BWI-Fair
+did \emph{not} show the dominant advantage seen on every synthetic graph:
+it trailed repeated-greedy by 2--11\% in spread at every checkpoint tested
+and showed a mixed, sometimes clearly worse, min-group reach (e.g.\
+$\beta=0.5$: 0.351 vs.\ 0.474, a 26\% deficit). We report this plainly,
+as an honest negative finding, rather than omitting it. Re-running the
+identical graph with compute budget fully restored to the main
+benchmark's settings ($T=30$, $B=100$, $K=20$, 15 trials, full Monte
+Carlo sample counts, repeated-greedy's own 2-rollout default -- see
+\texttt{experiments/\allowbreak REAL\_GRAPH\_FULLBUDGET\_\allowbreak FOLLOWUP.md})
+flips every one of the four original checkpoints from ``MF-BWI-Fair
+behind'' to ``tied or ahead'' (Table~\ref{tab:realgraph}), confirming
+budget was the dominant cause of the initial divergence on this graph.
+
+Extending the same full-budget protocol to two further real graphs at
+different scales (\texttt{real\_facebook\_686}, 168 nodes;
+\texttt{real\_facebook\_3437}, 532 nodes, the sparsest and most
+community-structured of the three) surfaced a second, independent cause:
+a harness bug (\texttt{experiments/REAL\_GRAPH\_N3\_FOLLOWUP.md}, Section
+5) under which one-shot baselines' seed sets were marked active
+\emph{before} the first simulation round, letting them start propagating
+a full round earlier than the two sequential methods (MF-BWI-Fair and
+repeated-greedy), which both spend their own first round only selecting
+seeds. This head start is negligible on graphs that saturate in a handful
+of rounds but compounds over a longer growth phase on
+\texttt{real\_facebook\_3437}'s sparser topology, and was responsible for
+MF-BWI-Fair trailing 4 of 5 baselines in mean spread on that graph,
+including the one-shot IMM baseline -- a result that should not occur
+under matched conditions and was the tell that something in the harness,
+not the algorithm, was at fault. Fixing the bug (giving both sequential
+methods an equivalent free seeding round) and re-running all three real
+graphs to completion (240/240 cells each) confirms this: MF-BWI-Fair now
+beats or ties every one-shot baseline at all three real-graph scales
+(the previously-losing comparison to IMM on \texttt{real\_facebook\_3437}
+flips to within $0.3\%$, i.e.\ noise), matching the pattern already seen
+on \texttt{real\_facebook\_348} and \texttt{real\_facebook\_686}. The one
+comparison the fix does \emph{not} change is MF-BWI-Fair vs.\
+repeated-greedy on \texttt{real\_facebook\_3437} specifically: both
+methods received the identical correction, so their $\sim\!2.5$--$2.7\%$
+spread gap (repeated-greedy ahead) is essentially unchanged before and
+after the fix, and is best explained by a real, algorithm-specific
+effect, not a harness artifact -- repeated-greedy's expensive per-round
+joint-rollout evaluation out-ramps MF-BWI-Fair's cheaper,
+mean-field-decoupled Lagrangian index on this graph's richer, more
+disparate 6-community structure, a limitation worth flagging
+(Section~\ref{sec:limitations}) rather than a sign the method fails
+broadly. The qualitative pattern documented on \texttt{real\_facebook\_348}
+-- tied at low backfire/recovery, a growing MF-BWI-Fair lead as either
+increases -- holds against every one-shot baseline at all three
+real-graph scales post-fix.
 
 \begin{table}[t]
 \centering
 \caption{Real Facebook ego-network (\texttt{real\_facebook\_348}):
-MF-BWI-Fair vs.\ repeated-greedy, reduced vs.\ full compute budget.}
+MF-BWI-Fair vs.\ repeated-greedy, reduced vs.\ full compute budget
+(full-budget column post-harness-fix).}
 \label{tab:realgraph}
 \begin{tabular}{lcc}
 \toprule
@@ -900,10 +937,10 @@ Checkpoint & Reduced budget & Full budget \\
 \midrule
 $\beta=0.0$, spread    & $-9.3\%$ & $-1.2\%$ (tied) \\
 $\beta=0.5$, spread    & $-5.1\%$ & $\mathbf{+1.5\%}$ \\
-$\beta=0.5$, min-reach & $-26\%$  & $\mathbf{+3.8\%}$ \\
+$\beta=0.5$, min-reach & $-26\%$  & $\mathbf{+3.1\%}$ \\
 $q=0.1$, spread        & $-4.2\%$ & $-0.2\%$ (tied) \\
-$q=0.4$, spread        & $-2.3\%$ & $\mathbf{+2.5\%}$ \\
-$q=0.4$, min-reach     & $+14\%$  & $\mathbf{+4.3\%}$ \\
+$q=0.4$, spread        & $-2.3\%$ & $\mathbf{+2.7\%}$ \\
+$q=0.4$, min-reach     & $+14\%$  & $\mathbf{+3.5\%}$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -934,22 +971,32 @@ benchmark's 120 nodes.
 \section{Discussion and Limitations}
 \label{sec:limitations}
 
-\textbf{Graph coverage remains limited, and the one real network tested
-shows a narrower margin.} Section~\ref{sec:results-multigraph} shows the
-main benchmark's finding reproduces cleanly across two further synthetic
-scales and a structurally different scale-free topology, and -- once
-compute budget is matched to the main benchmark -- on one real social
-network, in the same qualitative shape (tied at low backfire/recovery,
-growing MF-BWI-Fair lead as either increases). But this is still a single
-real network (N=1 at the level of ``real networks tested''), and its
-margin is smaller than any synthetic graph tested (e.g.\ $+2.5\%$ spread
-at $q=0.4$ vs.\ $+23\%$ on \texttt{large\_sbm}), a gap in magnitude,
-though not direction, that is a plausible early signature of the
-mean-field decoupling approximation (Section~\ref{sec:algorithm})
-degrading somewhat on real, much denser, more clustered networks --
-consistent with, but not confirmed by, the next limitation below.
-Broader real-network coverage and degree-distribution families beyond
-this one ego-network remain future work.
+\textbf{Graph coverage remains limited, and the largest real network
+tested shows a narrower, specifically-attributed exception.}
+Section~\ref{sec:results-multigraph} shows the main benchmark's finding
+reproduces cleanly across two further synthetic scales and a structurally
+different scale-free topology, and -- once compute budget is matched to
+the main benchmark and a harness bug that gave one-shot baselines an
+unearned propagation head start is fixed -- against every one-shot
+classical baseline on all three real social networks tested, in the same
+qualitative shape (tied at low backfire/recovery, growing MF-BWI-Fair
+lead as either increases). This is still only three real networks (N=3
+at the level of ``real networks tested'', all SNAP ego-Facebook
+subgraphs), and on the largest and sparsest of the three
+(\texttt{real\_facebook\_3437}, 532 nodes, 6 detected communities)
+MF-BWI-Fair trails one baseline -- repeated-greedy specifically, by a
+small, stable $\sim\!2.5$--$2.7\%$ mean spread margin that the harness
+fix does not change, since repeated-greedy receives the identical
+correction. This residual gap is attributable to repeated-greedy's
+expensive per-round joint-rollout evaluation out-ramping MF-BWI-Fair's
+cheaper, mean-field-decoupled Lagrangian index specifically on graphs
+with richer, more disparate community structure, rather than to the
+mean-field approximation degrading with density or degree per se (the
+smaller, denser \texttt{real\_facebook\_348} and \texttt{real\_facebook\_686}
+graphs show no such gap against any baseline, including repeated-greedy).
+Broader real-network coverage, degree-distribution families beyond
+ego-Facebook subgraphs, and a more direct ablation of MF-BWI-Fair's
+ramp-up speed against repeated-greedy's rollout depth remain future work.
 
 \textbf{A further backfire-dependent hardness worsening remains an open
 conjecture, deliberately not claimed as a result.} A candidate constant

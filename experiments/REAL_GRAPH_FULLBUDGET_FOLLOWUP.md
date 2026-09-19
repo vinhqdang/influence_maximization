@@ -1,5 +1,15 @@
 # Real Facebook graph, full budget: follow-up to Section 4.2
 
+**Further superseded:** this document's own full-budget numbers below were
+later found to still carry a separate harness bug (one-shot baselines got
+a free propagation round that MF-BWI-Fair and repeated_greedy did not);
+see `REAL_GRAPH_N3_FOLLOWUP.md` Section 5 for the diagnosis and Section 6
+for the fix and the post-fix re-run of this same graph plus two more
+scales (686, 3437 nodes). Section 6.2 there confirms this document's
+qualitative conclusion (MF-BWI-Fair ties/leads on 348) is unaffected by
+that further fix; the numeric tables below are the pre-that-fix values,
+kept for the audit trail.
+
 This is the clean follow-up that Section 4.2 of `MULTIGRAPH_VALIDATION.md`
 flagged as needed: the **same** `real_facebook_348` graph (`data/ego-facebook/348.edges`,
 same Weighted-Cascade `p_plus`, same community-detection group assignment),

@@ -188,7 +188,30 @@ topology. **The core finding is not an artifact of the one hand-tuned
 120-node SBM graph** -- it reproduces across scale and topology changes
 within the synthetic-graph family.
 
-### 4.2 The real Facebook ego-network: the finding does NOT clearly hold
+### 4.2 The real Facebook ego-network: the finding does NOT clearly hold (superseded, see below)
+
+**Superseded:** the reduced-budget result below was the trigger for two
+follow-up investigations that fully resolve it --
+`experiments/REAL_GRAPH_FULLBUDGET_FOLLOWUP.md` (budget restored to the
+main study's settings on this same 348-node graph: every checkpoint flips
+from "MF-BWI-Fair behind" to "tied or ahead") and
+`experiments/REAL_GRAPH_N3_FOLLOWUP.md` (extended to 686- and 3437-node
+graphs; Section 6 of that document reports a harness bug fix -- one-shot
+baselines were structurally getting a free propagation round that the two
+sequential methods, MF-BWI-Fair and repeated_greedy, did not -- and the
+post-fix re-run of all three graphs to 240/240 completion). The current,
+up-to-date verdict is in `REAL_GRAPH_N3_FOLLOWUP.md` Section 6.4: the
+finding replicates against every one-shot classical baseline at all three
+real-graph scales tested once the harness bug is fixed; the one narrow,
+disclosed exception is that MF-BWI-Fair trails `repeated_greedy`
+specifically (not the field generally) by a small, stable ~2.5-2.7% mean
+spread margin on the largest (3437-node) graph, attributed to
+`repeated_greedy`'s more expensive direct joint-rollout evaluation
+out-ramping MF-BWI-Fair's cheaper mean-field-relaxed index on that
+graph's richer community structure -- a real, algorithm-specific
+limitation, not the harness artifact. The rest of this subsection is kept
+as originally written for the audit trail; do not cite it as the current
+finding.
 
 This is the result that matters most and must be reported plainly rather
 than smoothed over. On `real_facebook_348` (224 real nodes, avg. degree
