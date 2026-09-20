@@ -8,6 +8,8 @@
 \usepackage{booktabs}
 \usepackage{graphicx}
 \usepackage{url}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,calc}
 
 \newtheorem{theorem}{Theorem}
 \newtheorem{lemma}{Lemma}
@@ -325,6 +327,30 @@ what makes the one-step map $A_t\mapsto A_{t+1}$ monotone in $A_t$ at
 $\beta=0$, which the submodularity result of Section~\ref{sec:theory}
 rests on; for $\beta>0$ the map is not monotone, since the backfire clause
 is anti-monotone.
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[
+  >=Stealth, node distance=2.6cm, thick,
+  state/.style={circle, draw, minimum size=1.5cm, align=center},
+  every loop/.style={min distance=10mm, looseness=8},
+]
+\node[state] (I) {INACTIVE};
+\node[state, right=of I] (A) {ACTIVE};
+\draw[->] (I) to[bend left=18] node[above, align=center, font=\scriptsize]
+  {$u\in N_{\mathrm{in}}(v)$ active,\\positive trial ($p_{uv}$)} (A);
+\draw[->] (A) to[bend left=18] node[below, align=center, font=\scriptsize]
+  {recovery ($q_v$) or\\backfire from active $u$ ($\beta p_{uv}$),\\
+  no rescuing positive trial} (I);
+\path (I) edge[loop left, font=\scriptsize] node {else} (I);
+\path (A) edge[loop right, font=\scriptsize] node {else} (A);
+\end{tikzpicture}
+\caption{Per-node round transition, illustrated for a single active
+in-neighbor $u$ (the full rule, Eq.~(1), depends jointly on \emph{every}
+active in-neighbor: any one successful positive trial rescues or
+activates $v$, overriding recovery/backfire that same round).}
+\label{fig:state-transition}
+\end{figure}
 
 The objective is cumulative expected spread,
 \begin{equation}
@@ -647,6 +673,30 @@ reweighting, Fair) is a stateful per-round control policy. Each round:
   tracker; and each group's realized reach average $u_g$ is updated for the
   next round's weights.
 \end{enumerate}
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[
+  >=Stealth, node distance=0.55cm and 1.05cm, thick, font=\scriptsize,
+  box/.style={draw, rounded corners, align=center, minimum height=0.9cm, text width=2.05cm, fill=black!3},
+]
+\node[box] (bayes) {1. Bayesian\\posterior\\tracking};
+\node[box, right=of bayes] (mf) {2. Mean-field\\belief fixed\\point};
+\node[box, right=of mf] (fair) {3. Group\\welfare\\weights};
+\node[box, below=of fair] (index) {4. Closed-form\\Lagrangian\\index (per node)};
+\node[box, left=of index] (fill) {5. Leftover-\\budget greedy\\fill};
+\node[box, left=of fill] (env) {6. Execute in\\environment,\\observe};
+\draw[->] (bayes) -- (mf);
+\draw[->] (mf) -- (fair);
+\draw[->] (fair) -- (index);
+\draw[->] (index) -- (fill);
+\draw[->] (fill) -- (env);
+\draw[->] (env.south) |- ++(0,-0.5) -| (bayes.south) node[midway, below, yshift=-0.5cm] {next round};
+\end{tikzpicture}
+\caption{MF-BWI-Fair's per-round control loop (numbered as in the list
+above); Algorithm~\ref{alg:mfbwi} gives the corresponding pseudocode.}
+\label{fig:pipeline}
+\end{figure}
 
 \begin{algorithm}[t]
 \caption{MF-BWI-Fair, one round}
@@ -998,6 +1048,35 @@ Section~\ref{sec:limitations}. The qualitative pattern documented on
 \texttt{real\_facebook\_348} -- tied at low backfire/recovery, a growing
 MF-BWI-Fair lead as either increases -- holds against every one-shot
 baseline at all three real-graph scales post-fix.
+
+\textbf{A cross-graph summary.} Figure~\ref{fig:cross-graph} condenses
+every graph discussed above (and \texttt{large\_community\_sbm} from
+Section~\ref{sec:limitations}) into one view: for each graph, MF-BWI-Fair's
+mean spread advantage over the best one-shot baseline and over
+repeated-greedy, averaged across that graph's own $\beta$ sweep (including
+the $\beta=0$ point where Lemma~\ref{lem:recovery-submodular} guarantees a
+tie with repeated-greedy, so this average necessarily understates the
+lead reported at high $\beta$ elsewhere in this section -- it is a
+conservative, non-cherry-picked single number per graph, not a
+replacement for the sweep curves). The one-shot advantage shrinks
+markedly with graph size and density (from $+70\%$ on the 60-node
+\texttt{small\_sbm} to single digits on the three real graphs), while the
+repeated-greedy comparison stays within a few percent of parity
+everywhere except the two most disparately-structured graphs
+(\texttt{real\_facebook\_3437} and \texttt{large\_community\_sbm}), where
+it is MF-BWI-Fair that trails slightly -- visually summarizing the same
+scale/structure-dependent picture developed above and in
+Section~\ref{sec:limitations}.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/cross_graph_summary.png}
+\caption{MF-BWI-Fair's mean spread advantage (\%) over the best one-shot
+baseline and over repeated-greedy, averaged across each graph's own
+$\beta$ sweep, for all eight graphs tested (synthetic and real, ordered
+by node count).}
+\label{fig:cross-graph}
+\end{figure}
 
 \begin{table}[t]
 \centering
