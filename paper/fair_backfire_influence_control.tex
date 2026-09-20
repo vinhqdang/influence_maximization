@@ -231,6 +231,49 @@ finding: spontaneous, state-independent recovery alone preserves monotone
 submodularity on \emph{any} graph, via layered-DAG reachability rather than
 threshold-rule structure.
 
+\subsection{Connections to epidemic-network control}
+At $\beta=0$, this paper's recovery-capable dynamics is exactly an SIS
+(susceptible-infected-susceptible) process: an active node spontaneously
+deactivates at rate $q_v$, precisely as an infected node recovers under
+SIS. The network epidemic-control literature has studied this same
+two-state process from the opposite direction -- suppressing spread
+rather than sustaining it. Wang et al.~\cite{wang2003eigenvalue} and Van
+Mieghem, Omic, and Kooij~\cite{vanmieghem2009virus} establish the
+classical spectral epidemic threshold $\tau_c=1/\lambda_{\max}(G)$ for
+SIS on an arbitrary graph -- a static structural quantity, not a
+per-round control policy. Chen et al.~\cite{chen2016node} pursue the
+same suppression goal by removing or immunizing nodes to lower
+$\lambda_{\max}$, a one-shot structural edit rather than a recurring
+activation decision; Nowzari, Preciado, and Pappas~\cite{nowzari2016analysis}
+survey the broader control-theoretic literature built on this spectral
+view. Our problem inverts both the objective (sustain spread, not
+suppress it) and the intervention (a per-round, per-node
+activation/maintenance decision under a shared budget, not a one-time
+structural edit to the graph), while sharing the same underlying
+two-state stochastic process; the closed-form Lagrangian index of
+Section~\ref{sec:index} is, in this sense, a per-round control policy
+for the SIS-style state each node already carries, rather than a static
+spectral quantity computed once from the graph.
+
+\subsection{Learning-based / GNN influence maximization}
+A separate line of work replaces the classical submodular-greedy
+pipeline with learned models. Panagopoulos, Malliaros, and
+Vazirgiannis~\cite{panagopoulos2022multitask} learn influencer/susceptible
+node embeddings directly from observed cascades via multi-task learning
+and select seeds from the learned representation, with no explicit
+diffusion model. Ling et al.~\cite{ling2023deepim} and Chen et
+al.~\cite{chen2024touplegdd} go further, replacing the greedy
+marginal-gain loop itself with an end-to-end graph neural network -- a
+generative spread-count decoder in the former, a double deep-Q-network
+trained over coupled GNN encoders in the latter. These approaches trade
+the classical worst-case $(1-1/e)$-style guarantee for empirical
+accuracy and inference-time speed on the graph distribution they are
+trained on, and none addresses group fairness, non-progressive/recovery
+dynamics, or parameter uncertainty jointly; like
+\cite{feng2023influence} and \cite{hui2024nonprogressive} above, they
+are complementary rather than competing baselines for this paper's
+classical-algorithms, guarantee-preserving focus.
+
 \subsection{Non-monotone / non-submodular / negative-influence models}
 Bharathi et al.~\cite{bharathi2007competitive} give the first competitive
 cascade model. Chen et al.~\cite{chen2011influence} extend IC with a quality

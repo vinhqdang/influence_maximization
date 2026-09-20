@@ -145,6 +145,44 @@ K.~Tan{\i}nm{\i}s, N.~Aras, and I.~K. Alt{\i}nel, ``Influence maximization with
   deactivation in social networks,'' \emph{European Journal of Operational
   Research}, vol. 278, 2019.
 
+\bibitem{wang2003eigenvalue}
+Y.~Wang, D.~Chakrabarti, C.~Wang, and C.~Faloutsos, ``Epidemic spreading in
+  real networks: An eigenvalue viewpoint,'' in \emph{22nd International
+  Symposium on Reliable Distributed Systems (SRDS 2003)}, 2003, pp. 25--34.
+
+\bibitem{vanmieghem2009virus}
+P.~Van~Mieghem, J.~Omic, and R.~E. Kooij, ``Virus spread in networks,''
+  \emph{IEEE/ACM Transactions on Networking}, vol.~17, no.~1, pp. 1--14, 2009.
+
+\bibitem{chen2016node}
+C.~Chen, H.~Tong, B.~A. Prakash, C.~E. Tsourakakis, T.~Eliassi-Rad,
+  C.~Faloutsos, and D.~H. Chau, ``Node immunization on large graphs: Theory and
+  algorithms,'' \emph{IEEE Transactions on Knowledge and Data Engineering},
+  vol.~28, no.~1, pp. 113--126, 2016.
+
+\bibitem{nowzari2016analysis}
+C.~Nowzari, V.~M. Preciado, and G.~J. Pappas, ``Analysis and control of
+  epidemics: A survey of spreading processes on complex networks,'' \emph{IEEE
+  Control Systems Magazine}, vol.~36, no.~1, pp. 26--46, 2016.
+
+\bibitem{panagopoulos2022multitask}
+G.~Panagopoulos, F.~D. Malliaros, and M.~Vazirgiannis, ``Multi-task learning
+  for influence estimation and maximization,'' \emph{IEEE Transactions on
+  Knowledge and Data Engineering}, vol.~34, no.~9, pp. 4398--4409, 2022.
+
+\bibitem{ling2023deepim}
+C.~Ling, J.~Jiang, J.~Wang, M.~T. Thai, L.~Xue, J.~Song, M.~Qiu, and L.~Zhao,
+  ``Deep graph representation learning and optimization for influence
+  maximization,'' in \emph{Proceedings of the 40th International Conference on
+  Machine Learning (ICML)}, ser. Proceedings of Machine Learning Research, vol.
+  202, 2023, pp. 21\,350--21\,361.
+
+\bibitem{chen2024touplegdd}
+T.~Chen, S.~Yan, J.~Guo, and W.~Wu, ``Touplegdd: A fine-designed solution of
+  influence maximization by deep reinforcement learning,'' \emph{IEEE
+  Transactions on Computational Social Systems}, vol.~11, no.~2, pp.
+  2210--2221, 2024.
+
 \bibitem{bharathi2007competitive}
 S.~Bharathi, D.~Kempe, and M.~Salek, ``Competitive influence maximization in
   social networks,'' in \emph{Proceedings of the 3rd International Workshop on
