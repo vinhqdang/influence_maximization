@@ -943,7 +943,10 @@ or $q$ increases, in both spread and min-group reach -- e.g.\
 \texttt{large\_sbm} at $q=0.4$: 202.8 vs.\ 164.2 spread ($+23\%$);
 \texttt{small\_sbm} at $q=0.4$: min-group reach 0.772 vs.\ 0.553. This
 result is not an artifact of the one hand-tuned 120-node graph used for
-the main benchmark.
+the main benchmark. A fourth synthetic graph, \texttt{large\_community\_sbm}
+(1,065 nodes, six disparately-sized communities), targets a more specific
+question and is discussed with the real-graph exception in
+Section~\ref{sec:limitations}.
 
 \textbf{The real network initially diverged; restoring compute budget and
 fixing a harness bug both mattered, and together resolve it.} At a
@@ -1076,14 +1079,52 @@ anything trends in the opposite direction from what the
 uncertainty-cost explanation would predict. This ablation rules out the
 second explanation and gives direct, if not exhaustive, support for the
 first: the residual gap is a genuine control-quality effect of the
-mean-field-decoupled index on graphs with richer, more disparate
-community structure, not a cost of not knowing the true parameters and
-not the mean-field approximation degrading with density or degree per
-se (the smaller, denser 348-node and 686-node graphs show no such gap
-against any baseline, including repeated-greedy). Broader real-network
-coverage, degree-distribution families beyond
-ego-Facebook subgraphs, and a more direct ablation of MF-BWI-Fair's
-ramp-up speed against repeated-greedy's rollout depth remain future work.
+mean-field-decoupled index, not a cost of not knowing the true
+parameters (the smaller, denser 348-node and 686-node graphs show no
+such gap against any baseline, including repeated-greedy, ruling out a
+simple density- or degree-driven explanation too).
+
+What structural property of \texttt{real\_facebook\_3437} drives it is
+less clear than a first look suggests. The natural candidate --
+that six disparately-sized communities are simply harder for mean-field
+decoupling as a network grows -- is directly testable by scaling that
+same structure up on a synthetic graph, so we built one:
+\texttt{large\_community\_sbm}, a stochastic block model with
+\texttt{real\_facebook\_3437}'s own six community-size ratios
+(165:137:79:42:39:70) scaled to twice its node count ($n=1{,}065$), at a
+modest average degree ($\approx\!9.7$) comparable to the other synthetic
+checks above rather than to \texttt{real\_facebook\_3437}'s own denser
+topology ($\approx\!36$). MF-BWI-Fair beats every one-shot baseline by a
+wide margin at every point of both sweeps on this graph, exactly as
+everywhere else, but the gap to repeated-greedy neither reproduces nor
+grows: pooled across all 8 sweep points (6 trials each), the mean gap is
+$-1.05\%$ (95\% CI $[-1.74\%,-0.36\%]$), smaller than
+\texttt{real\_facebook\_3437}'s $-2.5$--$2.7\%$, individually
+indistinguishable from zero at 5 of 8 points, and it even flips sign at
+the highest recovery rate tested ($q=0.4$: $+1.81\%$, CI crossing zero)
+(Figure~\ref{fig:large-community-sweeps}). Scaling the same
+community-size ratio up, at a typical synthetic density, is therefore
+not on its own sufficient to reproduce \texttt{real\_facebook\_3437}'s
+gap. Graph density, or some other property specific to that one real
+network, remains a live alternative we have not yet isolated. Broader
+real-network coverage beyond the ego-Facebook family, and a
+density-matched (rather than community-ratio-matched) synthetic test,
+remain future work.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/large_community_sbm_beta.png}
+\\[4pt]
+\includegraphics[width=\columnwidth]{figures/large_community_sbm_q.png}
+\caption{\texttt{large\_community\_sbm} (1,065 nodes, six community
+sizes scaled from \texttt{real\_facebook\_3437}): time-averaged spread
+vs.\ backfire intensity $\beta$ at $q=0.05$ (top) and vs.\ recovery rate
+$q$ at $\beta=0.15$ (bottom), mean $\pm$ 95\% CI shading, 6 trials per
+point. MF-BWI-Fair (teal) leads every one-shot baseline throughout and
+tracks repeated-greedy (yellow) closely, unlike the stable, one-sided
+gap seen on \texttt{real\_facebook\_3437} itself.}
+\label{fig:large-community-sweeps}
+\end{figure}
 
 \textbf{A further backfire-dependent hardness worsening remains an open
 conjecture, deliberately not claimed as a result.} A candidate constant
