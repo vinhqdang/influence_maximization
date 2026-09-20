@@ -72,8 +72,8 @@ one-round propagation head start over MF-BWI-Fair and a repeated-greedy
 baseline. Fixing both restores MF-BWI-Fair's lead over every one-shot
 classical baseline at all three real-graph scales, with one exception: on
 the largest real graph, MF-BWI-Fair trails the more expensive
-repeated-greedy rollout baseline by a small, stable margin (Section~\ref{sec:limitations}).
-We additionally benchmark our IMM
+repeated-greedy rollout baseline by a small, stable margin, examined in
+the Discussion section. We additionally benchmark our IMM
 reimplementation against the original authors' own C++ code and find it
 trustworthy (within 0.6\% expected spread).
 \end{abstract}
@@ -369,10 +369,12 @@ otherwise have recovered or been backfired. This rescue clause is exactly
 what makes the one-step map $A_t\mapsto A_{t+1}$ monotone in $A_t$ at
 $\beta=0$, which the submodularity result of Section~\ref{sec:theory}
 rests on; for $\beta>0$ the map is not monotone, since the backfire clause
-is anti-monotone.
+is anti-monotone. Figure~\ref{fig:state-transition} illustrates the rule
+for a single in-neighbor.
 
 \begin{figure}[t]
 \centering
+\resizebox{\columnwidth}{!}{
 \begin{tikzpicture}[
   >=Stealth, node distance=2.6cm, thick,
   state/.style={circle, draw, minimum size=1.5cm, align=center},
@@ -388,6 +390,7 @@ is anti-monotone.
 \path (I) edge[loop left, font=\scriptsize] node {else} (I);
 \path (A) edge[loop right, font=\scriptsize] node {else} (A);
 \end{tikzpicture}
+}
 \caption{Per-node round transition, illustrated for a single active
 in-neighbor $u$ (the full rule, Eq.~(1), depends jointly on \emph{every}
 active in-neighbor: any one successful positive trial rescues or
@@ -671,7 +674,8 @@ Section~\ref{sec:limitations}.
 \label{sec:algorithm}
 
 MF-BWI-Fair (Mean-Field Belief with a Lagrangian index and isoelastic-Welfare
-reweighting, Fair) is a stateful per-round control policy. Each round:
+reweighting, Fair) is a stateful per-round control policy summarized in
+Figure~\ref{fig:pipeline}. Each round:
 
 \begin{enumerate}
 \item \textbf{Bayesian posterior tracking.} A Beta--Bernoulli tracker
@@ -719,6 +723,7 @@ reweighting, Fair) is a stateful per-round control policy. Each round:
 
 \begin{figure}[t]
 \centering
+\resizebox{\columnwidth}{!}{
 \begin{tikzpicture}[
   >=Stealth, node distance=0.55cm and 1.05cm, thick, font=\scriptsize,
   box/.style={draw, rounded corners, align=center, minimum height=0.9cm, text width=2.05cm, fill=black!3},
@@ -736,6 +741,7 @@ reweighting, Fair) is a stateful per-round control policy. Each round:
 \draw[->] (fill) -- (env);
 \draw[->] (env.south) |- ++(0,-0.5) -| (bayes.south) node[midway, below, yshift=-0.5cm] {next round};
 \end{tikzpicture}
+}
 \caption{MF-BWI-Fair's per-round control loop (numbered as in the list
 above); Algorithm~\ref{alg:mfbwi} gives the corresponding pseudocode.}
 \label{fig:pipeline}
@@ -799,7 +805,9 @@ Section~\ref{sec:results-main}; Section~\ref{sec:results-multigraph}
 additionally reports the same six-algorithm comparison on three further
 synthetic graphs at different scales and topologies and on three real
 social networks, checking that the main benchmark's qualitative finding
-does not depend on this one hand-tuned graph.
+does not depend on this one hand-tuned graph. A fourth, larger synthetic
+graph targeting a more specific follow-up question is introduced later,
+in Section~\ref{sec:limitations}.
 
 \textbf{Budget and horizon.} Per-round budget $B=100$, horizon $T=30$
 rounds. One-shot baselines are given $k=20$ seeds, chosen so that
@@ -1103,13 +1111,20 @@ lead reported at high $\beta$ elsewhere in this section -- it is a
 conservative, non-cherry-picked single number per graph, not a
 replacement for the sweep curves). The one-shot advantage shrinks
 markedly with graph size and density (from $+70\%$ on the 60-node
-\texttt{small\_sbm} to single digits on the three real graphs), while the
-repeated-greedy comparison stays within a few percent of parity
-everywhere except the two most disparately-structured graphs
-(\texttt{real\_facebook\_3437} and \texttt{large\_community\_sbm}), where
-it is MF-BWI-Fair that trails slightly -- visually summarizing the same
-scale/structure-dependent picture developed above and in
-Section~\ref{sec:limitations}.
+\texttt{small\_sbm} to at most $+9.6\%$, and a statistical tie, on the
+three real graphs), while the repeated-greedy comparison stays within a
+few percent of parity everywhere except the two most
+disparately-structured graphs (\texttt{real\_facebook\_3437} and
+\texttt{large\_community\_sbm}), where it is MF-BWI-Fair that trails
+slightly -- visually summarizing the same scale/structure-dependent
+picture developed above and in Section~\ref{sec:limitations}. The two
+disparately-structured graphs' bars ($-2.5\%$ and $-1.6\%$) look similar
+here because this figure only averages the $\beta$ sweep; pooling both
+sweeps with a confidence interval, as Section~\ref{sec:limitations}
+does, puts \texttt{large\_community\_sbm}'s gap smaller still
+($-1.05\%$, 95\% CI crossing $-0.36\%$) and not statistically
+distinguishable from zero at most operating points, unlike
+\texttt{real\_facebook\_3437}'s more consistent gap.
 
 \begin{figure}[t]
 \centering
@@ -1195,16 +1210,22 @@ distinguish the two with a direct ablation. We re-run MF-BWI-Fair on the
 same graph with its Bayesian tracker bypassed and its own posterior
 forced to the true parameters throughout, at 6 representative $\beta$/$q$
 operating points and 5 trials each. This leaves the gap to
-repeated-greedy statistically unchanged: the mean gap is $-2.61\%$ with
-the Bayesian posterior and $-2.81\%$ with true parameters, and if
-anything trends in the opposite direction from what the
-uncertainty-cost explanation would predict. This ablation rules out the
-second explanation and gives direct, if not exhaustive, support for the
-first: the residual gap is a genuine control-quality effect of the
-mean-field-decoupled index, not a cost of not knowing the true
-parameters (the smaller, denser 348-node and 686-node graphs show no
-such gap against any baseline, including repeated-greedy, ruling out a
-simple density- or degree-driven explanation too).
+repeated-greedy statistically unchanged: the mean gap is $-2.60\%$ with
+the Bayesian posterior (15 trials, same 6 points) and $-2.81\%$ with true
+parameters (5 trials), a $-0.21$ percentage-point difference with an
+approximate 95\% CI of $[-0.73,+0.31]$ -- crossing zero, and if anything
+trending in the opposite direction from what the uncertainty-cost
+explanation would predict. This ablation therefore finds no support for
+the uncertainty-cost explanation and, by elimination, favors the first:
+the residual gap looks like a genuine control-quality effect of the
+mean-field-decoupled index rather than a cost of not knowing the true
+parameters. It is not, on its own, a controlled test of density or
+degree as confounds -- the smaller, denser 348-node and 686-node graphs
+simply show no such gap against any baseline, including repeated-greedy,
+which argues against density/degree alone as a simple, monotonic driver
+across the three real graphs tested, though (as the next paragraph
+finds) it does not yet isolate density's possible interaction with
+\texttt{real\_facebook\_3437}'s specific community structure.
 
 What structural property of \texttt{real\_facebook\_3437} drives it is
 less clear than a first look suggests. The natural candidate --
