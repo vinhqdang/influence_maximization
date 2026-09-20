@@ -68,12 +68,10 @@ from this pattern, and we trace it to two causes: an insufficient compute
 budget, and a harness bug that gave one-shot baselines an unearned
 one-round propagation head start over MF-BWI-Fair and a repeated-greedy
 baseline. Fixing both restores MF-BWI-Fair's lead over every one-shot
-classical baseline at all three real-graph scales. One exception remains,
-and we disclose it directly: on the largest real graph, MF-BWI-Fair
-trails the more expensive repeated-greedy rollout baseline by a small,
-stable margin, which we attribute to a genuine ramp-up-speed cost of the
-mean-field relaxation on richer community structure rather than to the
-harness artifact. We additionally benchmark our IMM
+classical baseline at all three real-graph scales, with one exception: on
+the largest real graph, MF-BWI-Fair trails the more expensive
+repeated-greedy rollout baseline by a small, stable margin (Section~\ref{sec:limitations}).
+We additionally benchmark our IMM
 reimplementation against the original authors' own C++ code and find it
 trustworthy (within 0.6\% expected spread).
 \end{abstract}
@@ -992,15 +990,11 @@ repeated-greedy on \texttt{real\_facebook\_3437} specifically: both
 methods received the identical correction, so their $\sim\!2.5$--$2.7\%$
 spread gap (repeated-greedy ahead) is essentially unchanged before and
 after the fix, and is best explained by a real, algorithm-specific
-effect, not a harness artifact -- repeated-greedy's expensive per-round
-joint-rollout evaluation out-ramps MF-BWI-Fair's cheaper,
-mean-field-decoupled Lagrangian index on this graph's richer, more
-disparate 6-community structure, a limitation worth flagging
-(Section~\ref{sec:limitations}) rather than a sign the method fails
-broadly. The qualitative pattern documented on \texttt{real\_facebook\_348}
--- tied at low backfire/recovery, a growing MF-BWI-Fair lead as either
-increases -- holds against every one-shot baseline at all three
-real-graph scales post-fix.
+effect rather than a harness artifact; we examine why in
+Section~\ref{sec:limitations}. The qualitative pattern documented on
+\texttt{real\_facebook\_348} -- tied at low backfire/recovery, a growing
+MF-BWI-Fair lead as either increases -- holds against every one-shot
+baseline at all three real-graph scales post-fix.
 
 \begin{table}[t]
 \centering
@@ -1199,15 +1193,11 @@ finding initially did not hold. We traced this to two distinct causes: a
 necessarily reduced compute budget, and a harness bug that gave one-shot
 baselines an unearned one-round propagation head start over the two
 sequential methods. Fixing both restores MF-BWI-Fair's lead over every
-one-shot classical baseline at all three real-graph scales. One
-exception remains: on the largest, most community-structured real graph,
-MF-BWI-Fair trails a more expensive repeated-greedy rollout baseline by
-a small, stable margin, which we attribute to a genuine ramp-up-speed
-cost of the mean-field relaxation rather than to either artifact we
-fixed. Closing that gap, and testing on real networks beyond the
-ego-Facebook family used here, remain open for future work. We also
-directly validated our IMM reimplementation against the original
-authors' C++ code and found it trustworthy.
+one-shot classical baseline at all three real-graph scales, with one
+exception discussed in Section~\ref{sec:limitations}. Testing on real
+networks beyond the ego-Facebook family used here remains open for
+future work. We also directly validated our IMM reimplementation
+against the original authors' C++ code and found it trustworthy.
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}
