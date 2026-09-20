@@ -26,7 +26,7 @@
 Dang is with the British University Vietnam, Hung Yen, Vietnam (e-mail:
 vinh.dq4@buv.edu.vn). ORCID: 0000-0002-3877-8024.}}
 
-\markboth{IEEE Transactions on Computational Social Systems}{}
+\markboth{IEEE Transactions on Knowledge and Data Engineering}{}
 
 \maketitle
 
@@ -1099,16 +1099,20 @@ Experiments on the main benchmark show MF-BWI-Fair matching or exceeding
 every tested baseline, including independently-verified published
 algorithms, in both spread and fairness, and this finding reproduces
 across three further synthetic graphs spanning two scales and a
-structurally different topology. On the one real social network tested,
-the finding initially did not hold under a necessarily reduced compute
-budget, but restoring that budget on the identical graph flipped every
-tested checkpoint from behind to tied-or-ahead -- evidence that the
-earlier divergence was substantially a budget artifact, though the
-resulting margin remains narrower on this real, denser network than on
-any synthetic graph tested, an open question for future work along with
-broader real-network coverage. We also directly validated our IMM
-reimplementation against the original authors' C++ code and found it
-trustworthy.
+structurally different topology. On three real social networks tested at
+increasing scale, the finding initially did not hold, for two distinct,
+disentangled reasons: a necessarily reduced compute budget, and a harness
+bug that gave one-shot baselines an unearned one-round propagation head
+start over the two sequential methods. Fixing both restores MF-BWI-Fair's
+lead over every one-shot classical baseline at all three real-graph
+scales; the sole disclosed exception is a small, stable margin behind a
+more expensive repeated-greedy rollout baseline on the largest, most
+community-structured real graph, attributable to a genuine ramp-up-speed
+cost of the mean-field relaxation rather than to either fixed artifact --
+an open question for future work along with broader real-network
+coverage beyond the ego-Facebook family tested here. We also directly
+validated our IMM reimplementation against the original authors' C++ code
+and found it trustworthy.
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}
