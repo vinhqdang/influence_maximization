@@ -237,11 +237,12 @@ D.~Li and P.~Varakantham, ``Efficient resource allocation with fairness
   constraints in restless multi-armed bandits,'' 2022.
 
 \bibitem{robustfair2026pacmmod}
-``Robust fair influence maximization under multiple community partitions,''
-  \emph{Proceedings of the ACM on Management of Data (PACMMOD)}, 2026.
+T.~Gao and T.~Ito, ``Robust fair influence maximization under multiple
+  community partitions,'' \emph{Proceedings of the ACM on Management of Data
+  (PACMMOD)}, vol.~4, no.~1, 2026.
 
 \bibitem{fang2026scalable}
-Q.~Fang, J.~Shi, X.~Rui, J.~Zhang, and Z.~Wang, ``Scalable fair influence
+Q.-P. Fang, J.-L. Shi, X.~Rui, J.~Zhang, and Z.~Wang, ``Scalable fair influence
   blocking maximization via approximately monotonic submodular optimization,''
   2026.
 

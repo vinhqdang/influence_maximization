@@ -90,4 +90,4 @@ Real-world validation uses subgraphs from the SNAP ego-Facebook dataset
 ## Citation
 
 If you use this code, please cite the accompanying manuscript (see
-`paper/main.tex` / `paper/references.bib`).
+`paper/fair_backfire_influence_control.tex` / `paper/references.bib`).

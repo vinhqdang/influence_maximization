@@ -62,17 +62,18 @@ rate tested, and show the egalitarian fix raising worst-off-group reach at
 negligible spread cost. We validate generalization on three further
 synthetic graphs (two scales, a structurally different scale-free
 topology) and three real social networks at increasing scale (224,
-168, and 532-node Facebook ego-networks): the synthetic-graph finding
-reproduces cleanly, and an initial real-network divergence traced to two
-causes -- an insufficient compute budget and a harness bug that gave
-one-shot baselines an unearned one-round propagation head start over
-MF-BWI-Fair and a repeated-greedy baseline -- is resolved once both are
-fixed, restoring MF-BWI-Fair's lead over every one-shot classical
-baseline at all three real-graph scales; the sole disclosed exception is
-a small, stable margin behind the more expensive repeated-greedy rollout
-baseline on the largest real graph, attributed to a genuine ramp-up-speed
-cost of the mean-field relaxation on richer community structure rather
-than the harness artifact. We additionally benchmark our IMM
+168, and 532-node Facebook ego-networks). The synthetic-graph finding
+reproduces cleanly. On the real networks, we first observe a divergence
+from this pattern, and we trace it to two causes: an insufficient compute
+budget, and a harness bug that gave one-shot baselines an unearned
+one-round propagation head start over MF-BWI-Fair and a repeated-greedy
+baseline. Fixing both restores MF-BWI-Fair's lead over every one-shot
+classical baseline at all three real-graph scales. One exception remains,
+and we disclose it directly: on the largest real graph, MF-BWI-Fair
+trails the more expensive repeated-greedy rollout baseline by a small,
+stable margin, which we attribute to a genuine ramp-up-speed cost of the
+mean-field relaxation on richer community structure rather than to the
+harness artifact. We additionally benchmark our IMM
 reimplementation against the original authors' own C++ code and find it
 trustworthy (within 0.6\% expected spread).
 \end{abstract}
@@ -431,7 +432,10 @@ the greedy solution run directly on $f_\beta$, and
 $S_{\mathrm{sand}}=\arg\max_{S\in\{S_L,S_U,S_\beta\}} f_\beta(S)$. Then, with
 $S^\star$ optimal for $f_\beta$,
 \begin{equation}
-f_\beta(S_{\mathrm{sand}}) \ge \max\left\{\frac{f_\beta(S_U)}{U(S_U)},\ \frac{L(S^\star)}{f_\beta(S^\star)}\right\}\Big(1-\frac1e\Big) f_\beta(S^\star) \ge \rho\Big(1-\frac1e\Big)\mathrm{OPT}_\beta,
+\begin{split}
+f_\beta(S_{\mathrm{sand}}) &\ge \max\left\{\frac{f_\beta(S_U)}{U(S_U)},\ \frac{L(S^\star)}{f_\beta(S^\star)}\right\}\Big(1-\frac1e\Big) f_\beta(S^\star)\\
+&\ge \rho\Big(1-\frac1e\Big)\mathrm{OPT}_\beta,
+\end{split}
 \end{equation}
 where $\rho \eqdef \min_{|S|\le k} L(S)/U(S)$.
 \end{theorem}
@@ -702,10 +706,9 @@ activation nor fails to cascade at all, either of which would mask the
 effects under study. This is the primary benchmark reported in
 Section~\ref{sec:results-main}; Section~\ref{sec:results-multigraph}
 additionally reports the same six-algorithm comparison on three further
-synthetic graphs at different scales and topologies and on one real
-social network, to check that the main benchmark's qualitative finding is
-not an artifact of this one hand-tuned graph
-(\texttt{experiments/MULTIGRAPH\_VALIDATION.md}).
+synthetic graphs at different scales and topologies and on three real
+social networks, checking that the main benchmark's qualitative finding
+does not depend on this one hand-tuned graph.
 
 \textbf{Budget and horizon.} Per-round budget $B=100$, horizon $T=30$
 rounds. One-shot baselines are given $k=20$ seeds, chosen so that
@@ -741,8 +744,7 @@ for Rahmattalabi et al.'s welfare mechanism specifically. All IMM numbers
 reported here are from this project's own Python reimplementation; we
 additionally benchmark that reimplementation directly against the original
 authors' C++ implementation and report the outcome in
-Section~\ref{sec:results-imm} (full method in
-\texttt{experiments/IMM\_VALIDATION.md}). No equivalent direct comparison
+Section~\ref{sec:results-imm}. No equivalent direct comparison
 exists for He--Kempe or Rahmattalabi et al.'s mechanisms, since no official
 code was found for either; those numbers remain characterizations of this
 project's own reimplementations only, cross-checked against the papers'
@@ -766,21 +768,21 @@ variance.
 
 Table~\ref{tab:main-spread} reports time-averaged spread for all six
 algorithms at the extremes of the backfire ($\beta$) and recovery ($q$)
-sweeps described in Section~\ref{sec:setup}, mean $\pm$ half-width of a
-95\% confidence interval over the 15 trials
-(Figure~\ref{fig:main-sweeps} shows the full sweep, not just these three
-points, confirming the same pattern holds in between). At $\beta=0$,
-$q=0.05$ -- close to the plain progressive-IC setting every one-shot
-baseline targets, where Lemma~\ref{lem:recovery-submodular} guarantees
-neither MF-BWI-Fair nor repeated-greedy can exceed the proven $(1-1/e)$
-ceiling regardless of $q$ -- MF-BWI-Fair and repeated-greedy are
-statistically indistinguishable (paired Wilcoxon signed-rank test,
-$W=49$, $p=0.53$, $n=15$); the moment either $\beta$ or $q$ departs from
-its low end, MF-BWI-Fair opens a lead over every other algorithm that is
-both large and statistically significant (paired Wilcoxon signed-rank
-test against repeated-greedy and against the best one-shot baseline at
-every other column and sweep point checked, $p<0.001$ in every case),
-reaching more than $6\times$ the best one-shot baseline's spread at
+sweeps described in Section~\ref{sec:setup}, as mean $\pm$ half-width of
+a 95\% confidence interval over the 15 trials. Figure~\ref{fig:main-sweeps}
+shows the full sweep rather than just these three points, and confirms
+the same pattern holds in between. At $\beta=0$, $q=0.05$, close to the
+plain progressive-IC setting every one-shot baseline targets,
+Lemma~\ref{lem:recovery-submodular} guarantees that neither MF-BWI-Fair
+nor repeated-greedy can exceed the proven $(1-1/e)$ ceiling, regardless of
+$q$; consistent with that, a paired Wilcoxon signed-rank test finds them
+statistically indistinguishable there ($W=49$, $p=0.53$, $n=15$). Once
+either $\beta$ or $q$ departs from its low end, MF-BWI-Fair opens a lead
+over every other algorithm that is both large and statistically
+significant: the same paired test rejects equality against
+repeated-greedy and against the best one-shot baseline at every other
+column and sweep point we checked ($p<0.001$ in every case), and the
+lead reaches more than $6\times$ the best one-shot baseline's spread at
 $q=0.4$.
 
 \begin{table}[t]
@@ -788,8 +790,8 @@ $q=0.4$.
 \caption{Time-averaged spread, 120-node SBM benchmark: mean $\pm$
 half-width of a 95\% CI over 15 trials. SG = He--Kempe's Saturate Greedy.}
 \label{tab:main-spread}
-\small
-\setlength{\tabcolsep}{3pt}
+\footnotesize
+\setlength{\tabcolsep}{2.5pt}
 \begin{tabular}{lccc}
 \toprule
 Algorithm & $\beta{=}0,q{=}0.05$ & $\beta{=}0.7,q{=}0.05$ & $\beta{=}0.15,q{=}0.4$ \\
@@ -804,11 +806,12 @@ MF-BWI-Fair       & \textbf{108.5}$\pm$0.5 & \textbf{104.6}$\pm$0.5 & \textbf{10
 \end{tabular}
 \end{table}
 
-Both column-1 entries are bolded deliberately: the 0.3-point gap is well
-inside the pair's own trial-to-trial noise (95\% CIs overlap almost
-entirely, and the paired test above finds no significant difference),
-consistent with the $(1-1/e)$-tie the theory predicts at this point --
-this is a reported tie, not an unresolved discrepancy.
+We bold both column-1 entries deliberately, since the 0.3-point gap
+between them is well inside the pair's own trial-to-trial noise: their
+95\% CIs overlap almost entirely, and the paired test above finds no
+significant difference. This matches the $(1-1/e)$-tie the theory
+predicts at this point, so we report it as a tie, not as an unresolved
+discrepancy.
 
 \begin{figure}[t]
 \centering
@@ -853,19 +856,20 @@ gap at $q=0$ (0.895 vs.\ 0.898). Total spread is essentially unchanged by
 the fairness correction, so this is a genuine improvement in the
 default operating point rather than a trade-off paid for it. The
 $\alpha_{\mathrm{fair}}$ knob provides an additional, independent lever
-on top of this default: min-group reach trends upward from 0.809 at the
+on top of this default. Min-group reach trends upward from 0.809 at the
 utilitarian extreme ($\alpha_{\mathrm{fair}}=1$) to 0.859 at a
-leximin-like extreme ($\alpha_{\mathrm{fair}}=-8$), crossing
-repeated-greedy's fixed 0.817 by $\alpha_{\mathrm{fair}}\approx0.5$; we
-note this trend is not perfectly monotonic at every intermediate point
-($\alpha_{\mathrm{fair}}=0.5$ shows a local peak of 0.863, and
-$\alpha_{\mathrm{fair}}=0$ a local dip to 0.829), consistent with these
-intermediate differences falling inside the 15-trial confidence intervals
-rather than being a reversal of the overall trend. Total spread likewise
-trends higher (105.8 to 107.6) rather than falling across the same range
--- fairness and spread are not in tension in this benchmark, though
-neither quantity moves perfectly monotonically at every intermediate
-$\alpha_{\mathrm{fair}}$ value tested. On the runtime axis, the
+leximin-like extreme ($\alpha_{\mathrm{fair}}=-8$), and it crosses
+repeated-greedy's fixed 0.817 near $\alpha_{\mathrm{fair}}\approx0.5$.
+This trend is not perfectly monotonic at every intermediate point:
+$\alpha_{\mathrm{fair}}=0.5$ shows a local peak of 0.863, and
+$\alpha_{\mathrm{fair}}=0$ a local dip to 0.829. We attribute these
+intermediate wiggles to trial noise, since they fall inside the
+15-trial confidence intervals rather than reversing the overall trend.
+Total spread likewise trends higher, from 105.8 to 107.6, rather than
+falling across the same range, so fairness and spread are not in tension
+in this benchmark, even though neither quantity moves perfectly
+monotonically at every intermediate $\alpha_{\mathrm{fair}}$ value
+tested. On the runtime axis, the
 closed-form Lagrangian index (Section~\ref{sec:algorithm}) is
 approximately $130\times$ faster per per-round decision than the
 bisection-plus-value-iteration procedure it replaces, at identical
@@ -875,39 +879,37 @@ bisection oracle.
 
 \subsubsection{Runtime scaling}
 \label{sec:results-scaling}
-Every experiment above is on graphs of at most 532 nodes (the largest
-real graph in Section~\ref{sec:results-multigraph}), too small to
-empirically stress-test the $O(Km+n\log n)$ per-round complexity of
-Theorem~\ref{thm:complexity}. We additionally measure MF-BWI-Fair's
-wall-clock per-round decision time (\texttt{choose\_actions}, averaged
-over 5 repeats) on Barabasi--Albert graphs from $n=100$ to $n=100{,}000$
-nodes at fixed average degree $\approx6$ ($m=3$ attachments), isolating
-the $n$-dependence from degree effects. Figure~\ref{fig:scaling} shows
-the result: per-round time grows from 0.013s at $n=100$ to 43.8s at
-$n=100{,}000$, an empirical power-law fit of $O(n^{1.30})$ over
-$n\in[1000,100{,}000]$ (least-squares fit in log-log space) -- mildly
-superlinear rather than the pure linear-in-$n$ behavior a
-reader might expect from a casual reading of $O(Km+n\log n)$ with $m=O(n)$
-at fixed average degree. This is not a violation of
-Theorem~\ref{thm:complexity}, which leaves $K$ (the number of mean-field
-fixed-point iterations to converge) as a separate, instance-dependent
-factor rather than asserting $K=O(1)$; the most plausible explanation is
-that Barabasi--Albert graphs' heavy-tailed degree distribution produces
-a small number of increasingly high-degree hub nodes as $n$ grows, mildly
-weakening the fixed point's contraction rate and so mildly increasing
-$K$ with $n$ on this specific graph family -- a real, disclosed
-effect, not a claimed $O(n)$ empirical result, and a natural target for
-future characterization of $K$'s own graph-family dependence. Even so,
-the measured cost remains dramatically more favorable than the classical
-alternatives it is compared against in Section~\ref{sec:index}: naive
-Monte Carlo KKT-greedy's $O(knRm)$ per seed set is untenable at
-$n=100{,}000$ (a single seed selection would require on the order of
-$k\cdot n\cdot R$ full-graph passes), while MF-BWI-Fair completes a full
-per-round decision in under a minute at this scale on ordinary hardware,
-with no GPU or distributed infrastructure. Raw timing data and the
-generating script are at
-\texttt{experiments/results\_multigraph/runtime\_scaling/} and
-\texttt{experiments/run\_scaling\_benchmark.py}.
+Every experiment above uses graphs of at most 532 nodes, the largest
+real graph in Section~\ref{sec:results-multigraph}. That scale is too
+small to stress-test the $O(Km+n\log n)$ per-round complexity claimed in
+Theorem~\ref{thm:complexity}, so we separately measure MF-BWI-Fair's
+wall-clock per-round decision time on Barabasi--Albert graphs from
+$n=100$ to $n=100{,}000$ nodes, holding average degree fixed at
+$\approx6$ ($m=3$ attachments) so that the measurement isolates the
+$n$-dependence from degree effects. Figure~\ref{fig:scaling} shows the
+result. Per-round time grows from 0.013s at $n=100$ to 43.8s at
+$n=100{,}000$; a least-squares fit in log-log space gives an empirical
+power law of $O(n^{1.30})$ over $n\in[1000,100{,}000]$, mildly
+superlinear rather than the pure linear-in-$n$ behavior a reader might
+expect from a casual reading of $O(Km+n\log n)$ with $m=O(n)$ at fixed
+average degree. This does not violate Theorem~\ref{thm:complexity},
+because the theorem leaves $K$ (the number of mean-field fixed-point
+iterations to converge) as a separate, instance-dependent factor and
+never asserts $K=O(1)$. We think the most plausible explanation is
+structural: Barabasi--Albert graphs' heavy-tailed degree distribution
+produces a small number of increasingly high-degree hub nodes as $n$
+grows, and these hubs mildly weaken the fixed point's contraction rate,
+which in turn mildly increases $K$ with $n$ on this specific graph
+family. We report this as a real, disclosed effect rather than as a
+claimed $O(n)$ result, and we leave a fuller characterization of $K$'s
+own graph-family dependence to future work. Even with this caveat, the
+measured cost remains dramatically more favorable than the classical
+alternatives compared against in Section~\ref{sec:index}: naive Monte
+Carlo KKT-greedy's $O(knRm)$ per seed set is untenable at
+$n=100{,}000$, since a single seed selection would already require on
+the order of $k\cdot n\cdot R$ full-graph passes, whereas MF-BWI-Fair
+completes a full per-round decision in under a minute at this scale on
+ordinary hardware, with no GPU or distributed infrastructure.
 
 \begin{figure}[t]
 \centering
@@ -934,10 +936,7 @@ edges, the sparsest and most community-structured of the three, with 6
 detected communities of sizes 39--165) (Weighted-Cascade edge
 probabilities~\cite{chen2009efficient}, and community-detection-derived
 groups as a structural fairness proxy in the absence of demographic
-attributes). Full detail, including every raw per-trial result, is
-reported in \texttt{experiments/MULTIGRAPH\_VALIDATION.md},
-\texttt{experiments/REAL\_GRAPH\_FULLBUDGET\_FOLLOWUP.md}, and
-\texttt{experiments/REAL\_GRAPH\_N3\_FOLLOWUP.md}.
+attributes).
 
 \textbf{The synthetic-graph finding reproduces across scale and topology.}
 On all three additional synthetic graphs, MF-BWI-Fair is tied with
@@ -962,8 +961,7 @@ $\beta=0.5$: 0.351 vs.\ 0.474, a 26\% deficit). We report this plainly,
 as an honest negative finding, rather than omitting it. Re-running the
 identical graph with compute budget fully restored to the main
 benchmark's settings ($T=30$, $B=100$, $K=20$, 15 trials, full Monte
-Carlo sample counts, repeated-greedy's own 2-rollout default -- see
-\texttt{experiments/\allowbreak REAL\_GRAPH\_FULLBUDGET\_\allowbreak FOLLOWUP.md})
+Carlo sample counts, repeated-greedy's own 2-rollout default)
 flips every one of the four original checkpoints from ``MF-BWI-Fair
 behind'' to ``tied or ahead'' (Table~\ref{tab:realgraph}), confirming
 budget was the dominant cause of the initial divergence on this graph.
@@ -972,8 +970,7 @@ Extending the same full-budget protocol to two further real graphs at
 different scales (\texttt{real\_facebook\_686}, 168 nodes;
 \texttt{real\_facebook\_3437}, 532 nodes, the sparsest and most
 community-structured of the three) surfaced a second, independent cause:
-a harness bug (\texttt{experiments/REAL\_GRAPH\_N3\_FOLLOWUP.md}, Section
-5) under which one-shot baselines' seed sets were marked active
+a harness bug under which one-shot baselines' seed sets were marked active
 \emph{before} the first simulation round, letting them start propagating
 a full round earlier than the two sequential methods (MF-BWI-Fair and
 repeated-greedy), which both spend their own first round only selecting
@@ -1032,8 +1029,7 @@ Every baseline reported above other than the classical objective forms
 they target is this project's own reimplementation, not the original
 authors' code (Section~\ref{sec:setup}). We benchmark our IMM
 reimplementation~\cite{tang2015influence} directly against the original
-authors' published C++ implementation (full method in
-\texttt{experiments/IMM\_VALIDATION.md}) on the main benchmark graph. The
+authors' published C++ implementation on the main benchmark graph. The
 two implementations select different-but-comparable seed sets (low
 node-level overlap is expected on a small, community-structured graph
 with substantial within-block redundancy), but land within 0.6\% of each
@@ -1053,46 +1049,45 @@ benchmark's 120 nodes.
 
 \textbf{Graph coverage remains limited, and the largest real network
 tested shows a narrower, specifically-attributed exception.}
-Section~\ref{sec:results-multigraph} shows the main benchmark's finding
-reproduces cleanly across two further synthetic scales and a structurally
-different scale-free topology, and -- once compute budget is matched to
-the main benchmark and a harness bug that gave one-shot baselines an
-unearned propagation head start is fixed -- against every one-shot
-classical baseline on all three real social networks tested, in the same
-qualitative shape (tied at low backfire/recovery, growing MF-BWI-Fair
-lead as either increases). This is still only three real networks (N=3
-at the level of ``real networks tested'', all SNAP ego-Facebook
-subgraphs), and on the largest and sparsest of the three
-(\texttt{real\_facebook\_3437}, 532 nodes, 6 detected communities)
-MF-BWI-Fair trails one baseline -- repeated-greedy specifically, by a
-small, stable $\sim\!2.5$--$2.7\%$ mean spread margin that the harness
-fix does not change, since repeated-greedy receives the identical
-correction. Two competing explanations for this residual gap are
-possible: (i) a genuine control-quality gap, since repeated-greedy's
-expensive per-round joint-rollout evaluation can capture
-community-bridging effects that MF-BWI-Fair's cheaper, mean-field-decoupled
-Lagrangian index cannot; or (ii) a parameter-uncertainty cost, since
-repeated-greedy is (deliberately, as a strong-baseline design choice,
-Section~\ref{sec:setup}) handed the true diffusion parameters directly
-while MF-BWI-Fair only ever sees its own Bayesian posterior estimates. We
-distinguish these with a direct ablation: re-running MF-BWI-Fair on
-\texttt{real\_facebook\_3437} with its Bayesian tracker bypassed and its
-own posterior forced to the true parameters throughout (5 trials, 6
-representative $\beta$/$q$ operating points) leaves the gap to
-repeated-greedy statistically unchanged (mean $-2.61\%$ with the Bayesian
-posterior vs.\ $-2.81\%$ with true parameters; the ablation, if anything,
-trends in the opposite direction from what the uncertainty-cost
-explanation would predict). This rules out explanation (ii) and is
-direct, if not exhaustive, evidence for (i): the residual gap is a
-genuine control-quality effect of the mean-field-decoupled index rather
-than a cost of not knowing the true parameters, on graphs with richer,
-more disparate community structure, rather than the mean-field
-approximation degrading with density or degree per se (the smaller,
-denser \texttt{real\_facebook\_348} and \texttt{real\_facebook\_686}
-graphs show no such gap against any baseline, including repeated-greedy).
-Raw data for this ablation is at
-\texttt{experiments/results\_multigraph/real\_facebook\_3437\_true\_param\_ablation.csv}.
-Broader real-network coverage, degree-distribution families beyond
+Section~\ref{sec:results-multigraph} shows that the main benchmark's
+finding reproduces cleanly across two further synthetic scales and a
+structurally different scale-free topology. It also reproduces against
+every one-shot classical baseline on all three real social networks we
+tested, in the same qualitative shape (tied at low backfire/recovery,
+with a growing MF-BWI-Fair lead as either increases), but only once we
+match compute budget to the main benchmark and fix a harness bug that
+had given one-shot baselines an unearned propagation head start. Three
+real networks is still a small sample, and all three are SNAP
+ego-Facebook subgraphs. On the largest and sparsest of the three (532
+nodes, 6 detected communities), MF-BWI-Fair trails one baseline,
+repeated-greedy specifically, by a small, stable $\sim\!2.5$--$2.7\%$
+mean spread margin. The harness fix does not change this margin, since
+repeated-greedy receives the identical correction.
+
+Two explanations for this residual gap compete. First, it could be a
+genuine control-quality gap: repeated-greedy's expensive per-round
+joint-rollout evaluation can capture community-bridging effects that
+MF-BWI-Fair's cheaper, mean-field-decoupled Lagrangian index cannot.
+Second, it could be a parameter-uncertainty cost: we deliberately hand
+repeated-greedy the true diffusion parameters directly, as a
+strong-baseline design choice (Section~\ref{sec:setup}), while
+MF-BWI-Fair only ever sees its own Bayesian posterior estimates. We
+distinguish the two with a direct ablation. We re-run MF-BWI-Fair on the
+same graph with its Bayesian tracker bypassed and its own posterior
+forced to the true parameters throughout, at 6 representative $\beta$/$q$
+operating points and 5 trials each. This leaves the gap to
+repeated-greedy statistically unchanged: the mean gap is $-2.61\%$ with
+the Bayesian posterior and $-2.81\%$ with true parameters, and if
+anything trends in the opposite direction from what the
+uncertainty-cost explanation would predict. This ablation rules out the
+second explanation and gives direct, if not exhaustive, support for the
+first: the residual gap is a genuine control-quality effect of the
+mean-field-decoupled index on graphs with richer, more disparate
+community structure, not a cost of not knowing the true parameters and
+not the mean-field approximation degrading with density or degree per
+se (the smaller, denser 348-node and 686-node graphs show no such gap
+against any baseline, including repeated-greedy). Broader real-network
+coverage, degree-distribution families beyond
 ego-Facebook subgraphs, and a more direct ablation of MF-BWI-Fair's
 ramp-up speed against repeated-greedy's rollout depth remain future work.
 
@@ -1183,43 +1178,36 @@ line of work be pursued further.
 
 \section{Conclusion}
 
-We formalized a combined relaxation of the four assumptions behind the
-classical influence-maximization guarantee -- progressive dynamics,
-monotone submodularity, known parameters, and fairness-free objectives --
-and proved that a sandwich approximation recovers a $\rho(1-1/e)$ guarantee
-for every backfire intensity, with a closed-form index making the
-resulting control problem tractable at near-linear per-round cost. We
-proved that $(1-1/e)$-hardness survives backfire exactly, while explicitly
-declining to upgrade a plausible but unproven constant-factor worsening
-result to theorem status. We corrected a measured fairness pathology in an
-existing welfare objective and implemented the result in MF-BWI-Fair.
-Experiments on the main benchmark show MF-BWI-Fair matching or exceeding
-every tested baseline, including independently-verified published
-algorithms, in both spread and fairness, and this finding reproduces
-across three further synthetic graphs spanning two scales and a
-structurally different topology. On three real social networks tested at
-increasing scale, the finding initially did not hold, for two distinct,
-disentangled reasons: a necessarily reduced compute budget, and a harness
-bug that gave one-shot baselines an unearned one-round propagation head
-start over the two sequential methods. Fixing both restores MF-BWI-Fair's
-lead over every one-shot classical baseline at all three real-graph
-scales; the sole disclosed exception is a small, stable margin behind a
-more expensive repeated-greedy rollout baseline on the largest, most
-community-structured real graph, attributable to a genuine ramp-up-speed
-cost of the mean-field relaxation rather than to either fixed artifact --
-an open question for future work along with broader real-network
-coverage beyond the ego-Facebook family tested here. We also directly
-validated our IMM reimplementation against the original authors' C++ code
-and found it trustworthy.
+This paper formalized a combined relaxation of the four assumptions
+behind the classical influence-maximization guarantee: progressive
+dynamics, monotone submodularity, known parameters, and fairness-free
+objectives. We proved that a sandwich approximation recovers a
+$\rho(1-1/e)$ guarantee for every backfire intensity, and we gave a
+closed-form index that makes the resulting control problem tractable at
+near-linear per-round cost. We proved that $(1-1/e)$-hardness survives
+backfire exactly, and we explicitly declined to upgrade a plausible but
+unproven constant-factor worsening result to theorem status. We also
+corrected a measured fairness pathology in an existing welfare objective
+and implemented the result in MF-BWI-Fair.
 
-\section*{Code and Data Availability}
-All code (simulator, algorithm and baseline implementations, experiment
-drivers), raw per-trial results underlying every table and figure in this
-paper, and the extended validation notes referenced throughout
-(\texttt{experiments/*.md}) are publicly available at
-\url{https://github.com/vinhqdang/influence_maximization}. The real-graph
-datasets are the SNAP ego-Facebook subgraphs~\cite{mcauley2012learning},
-themselves publicly available from the Stanford Network Analysis Project.
+On the main benchmark, MF-BWI-Fair matches or exceeds every tested
+baseline, including independently-verified published algorithms, in both
+spread and fairness, and this finding reproduces across three further
+synthetic graphs spanning two scales and a structurally different
+topology. On three real social networks tested at increasing scale, the
+finding initially did not hold. We traced this to two distinct causes: a
+necessarily reduced compute budget, and a harness bug that gave one-shot
+baselines an unearned one-round propagation head start over the two
+sequential methods. Fixing both restores MF-BWI-Fair's lead over every
+one-shot classical baseline at all three real-graph scales. One
+exception remains: on the largest, most community-structured real graph,
+MF-BWI-Fair trails a more expensive repeated-greedy rollout baseline by
+a small, stable margin, which we attribute to a genuine ramp-up-speed
+cost of the mean-field relaxation rather than to either artifact we
+fixed. Closing that gap, and testing on real networks beyond the
+ego-Facebook family used here, remain open for future work. We also
+directly validated our IMM reimplementation against the original
+authors' C++ code and found it trustworthy.
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}
