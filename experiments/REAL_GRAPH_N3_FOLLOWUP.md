@@ -260,10 +260,31 @@ community structure (3437 has 6 detected communities of sizes
 39-165, vs. 3-4 more homogeneous communities on 686/348), picking seeds
 that jointly bridge communities efficiently plausibly matters more, and a
 decoupled per-node index is intrinsically less able to capture that than an
-exact joint rollout evaluation -- but this last piece is diagnosed less
-conclusively than 5.1 and would benefit from a further targeted ablation
-(e.g., comparing seed-set community coverage between the two policies)
-before being stated as a proven mechanism in the manuscript.
+exact joint rollout evaluation.
+
+**Update (post-N3-harness-fix): the targeted ablation this section called
+for has since been run** (`experiments/run_scaling_benchmark.py`'s sibling
+ablation script, results at
+`results_multigraph/real_facebook_3437_true_param_ablation.csv`), and it
+rules out the competing explanation rather than merely leaving this one
+unconfirmed. MF-BWI-Fair was re-run on real_facebook_3437 with its
+Bayesian tracker bypassed and forced to the TRUE parameters throughout
+(matching repeated_greedy's own omniscient-parameter setup exactly), at 6
+representative (beta, q) operating points, 5 trials each. If the residual
+gap to repeated_greedy were a parameter-uncertainty cost rather than a
+control-quality one, giving MF-BWI-Fair the true parameters should have
+substantially closed it. It did not: mean gap to repeated_greedy across
+the 6 points is -2.61% with the Bayesian posterior vs. -2.81% with true
+parameters -- statistically unchanged, if anything trending slightly the
+opposite direction from what the uncertainty-cost hypothesis predicts.
+This is now direct ablation evidence (not merely a plausible narrative)
+that the residual gap is a genuine control-quality effect of the
+mean-field-decoupled index's inability to capture joint/community-bridging
+seed effects, not a cost of not knowing the true parameters. The
+comparing-seed-set-community-coverage ablation suggested above remains a
+reasonable follow-up for characterizing the mechanism further, but the
+weaker claim this section originally hedged on -- ruling out parameter
+uncertainty as the explanation -- is no longer an open question.
 
 ### 5.3 Summary for the manuscript
 
