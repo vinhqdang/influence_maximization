@@ -737,31 +737,69 @@ Figure~\ref{fig:pipeline}. Each round:
   next round's weights.
 \end{enumerate}
 
-\begin{figure}[t]
+\begin{figure*}[t]
 \centering
-\resizebox{\columnwidth}{!}{
+\resizebox{\textwidth}{!}{
 \begin{tikzpicture}[
-  >=Stealth, node distance=0.55cm and 1.05cm, thick, font=\scriptsize,
-  box/.style={draw, rounded corners, align=center, minimum height=0.9cm, text width=2.05cm, fill=black!3},
+  >=Stealth, thick, font=\scriptsize,
+  panel/.style={draw, rounded corners, align=left, text width=2.7cm, minimum height=4.6cm, inner sep=5pt, fill=black!3},
 ]
-\node[box] (bayes) {1. Bayesian\\posterior\\tracking};
-\node[box, right=of bayes] (mf) {2. Mean-field\\belief fixed\\point};
-\node[box, right=of mf] (fair) {3. Group\\welfare\\weights};
-\node[box, below=of fair] (index) {4. Closed-form\\Lagrangian\\index (per node)};
-\node[box, left=of index] (fill) {5. Leftover-\\budget greedy\\fill};
-\node[box, left=of fill] (env) {6. Execute in\\environment,\\observe};
-\draw[->] (bayes) -- (mf);
-\draw[->] (mf) -- (fair);
-\draw[->] (fair) -- (index);
-\draw[->] (index) -- (fill);
-\draw[->] (fill) -- (env);
-\draw[->] (env.north) -- (bayes.south) node[midway, left, align=center] {next\\round};
+\node[panel] (p1) at (0,0) {
+  {\bfseries\scriptsize 1. Bayesian posterior tracking}\\[3pt]
+  $\hat p^+_{uv},\hat p^-_{uv}\sim\mathrm{Beta}$\\
+  $\hat q_v\sim\mathrm{Beta}$\\[3pt]
+  Posterior means updated each round from that round's observed trial
+  outcomes; the policy never sees the simulator's true parameters.
+};
+\node[panel, right=0.4cm of p1] (p2) {
+  {\bfseries\scriptsize 2. Mean-field belief fixed point}\\[3pt]
+  {\tiny$m_v=m_v(1-\hat q_v)\!\!\prod\limits_{u\in N_{\mathrm{in}}(v)}\!\!(1-\hat p^-_{uv}m_u)$\\[1pt]
+  $+(1-m_v)\big(1-\!\!\prod\limits_{u\in N_{\mathrm{in}}(v)}\!\!(1-\hat p^+_{uv}m_u)\big)$}\\[3pt]
+  Solved by Jacobi iteration to tol.\ $10^{-4}$ or 50 iterations (Eq.~5).
+};
+\node[panel, right=0.4cm of p2] (p3) {
+  {\bfseries\scriptsize 3. Closed-form Lagrangian index}\\[3pt]
+  Per node: 2-state/3-action MDP -- NONE, CONVERT (cost $c_C$), MAINTAIN
+  (cost $c_M$).\\[3pt]
+  $\lambda^\star_v :=$ largest $\lambda$ at which the paid action is still
+  optimal at $v$'s current state (Prop.~5).
+};
+\node[panel, right=0.4cm of p3] (p4) {
+  {\bfseries\scriptsize 4. Fairness reweighting}\\[3pt]
+  Egalitarian welfare:\\
+  $W_\alpha(u)=\sum_g u_g^\alpha/\alpha$\\[3pt]
+  Marginal weight $w_g=u_g^{\alpha-1}$, recomputed each round from tracked
+  reach $u_g$ (Section~\ref{sec:fairness-fix}).
+};
+\node[panel, right=0.4cm of p4] (p5) {
+  {\bfseries\scriptsize 5. Select \& fill budget}\\[3pt]
+  Sort nodes by $\lambda^\star_v$ descending; take the prefix fitting
+  budget $B$.\\[3pt]
+  Fill any leftover budget by a greedy tie-break on the remaining index.
+};
+\node[panel, right=0.4cm of p5] (p6) {
+  {\bfseries\scriptsize 6. Execute, observe, update}\\[3pt]
+  Apply CONVERT/MAINTAIN to selected nodes, NONE elsewhere; simulator
+  advances one round (Section~\ref{sec:model}).\\[3pt]
+  Observed outcomes update the tracker and each $u_g$.
+};
+\draw[->] (p1) -- (p2);
+\draw[->] (p2) -- (p3);
+\draw[->] (p3) -- (p4);
+\draw[->] (p4) -- (p5);
+\draw[->] (p5) -- (p6);
+\node[draw, rounded corners, fill=black!3, below=0.7cm of p3, xshift=2.15cm,
+  text width=8.6cm, align=center, minimum height=0.7cm] (loop)
+  {\textit{next round: observe outcomes $\to$ update posteriors $\to$ recompute}};
+\draw[->] (p6.south) |- (loop.east);
+\draw[->] (loop.west) -| (p1.south);
 \end{tikzpicture}
 }
-\caption{MF-BWI-Fair's per-round control loop (numbered as in the list
-above); Algorithm~\ref{alg:mfbwi} gives the corresponding pseudocode.}
+\caption{MF-BWI-Fair's per-round control loop, with the exact update used
+at each stage (numbers match the list above); Algorithm~\ref{alg:mfbwi}
+gives the corresponding pseudocode.}
 \label{fig:pipeline}
-\end{figure}
+\end{figure*}
 
 \begin{algorithm}[t]
 \caption{MF-BWI-Fair, one round}
