@@ -382,9 +382,9 @@ for a single in-neighbor.
 ]
 \node[state] (I) {INACTIVE};
 \node[state, right=of I] (A) {ACTIVE};
-\draw[->] (I) to[bend left=18] node[above, align=center, font=\scriptsize]
+\draw[->] (I) to[bend left=35] node[above=1mm, align=center, font=\scriptsize]
   {$u\in N_{\mathrm{in}}(v)$ active,\\positive trial ($p_{uv}$)} (A);
-\draw[->] (A) to[bend left=18] node[below, align=center, font=\scriptsize]
+\draw[->] (A) to[bend left=35] node[below=1mm, align=center, font=\scriptsize]
   {recovery ($q_v$) or\\backfire from active $u$ ($\beta p_{uv}$),\\
   no rescuing positive trial} (I);
 \path (I) edge[loop left, font=\scriptsize] node {else} (I);
@@ -555,7 +555,36 @@ actions: NONE (free, either state), CONVERT (cost $c_C$, forces $0\to1$,
 only at $s=0$), MAINTAIN (cost $c_M$, forces stay-at-1, only at $s=1$),
 under a shared Lagrange price $\lambda$ per unit cost. There are exactly
 four deterministic stationary policies, named by (action at 0, action at
-1): NN, NM, CN, CM.
+1): NN, NM, CN, CM. Figure~\ref{fig:mdp} shows this per-node MDP; the
+index $\lambda^\star_v$ of Proposition~\ref{prop:indexability} below is
+computed from it in closed form, once per node, every round.
+
+\begin{figure}[t]
+\centering
+\resizebox{0.85\columnwidth}{!}{
+\begin{tikzpicture}[
+  >=Stealth, node distance=3.1cm, thick,
+  state/.style={circle, draw, minimum size=1.3cm, align=center},
+]
+\node[state] (S0) {$s=0$\\INACTIVE};
+\node[state, right=of S0] (S1) {$s=1$\\ACTIVE\\[1pt]{\scriptsize reward $w$}};
+\draw[->] (S0) to[bend left=55] node[above=1mm, align=center, font=\scriptsize]
+  {CONVERT (cost $c_C$):\\forces $0\to1$} (S1);
+\draw[->, dashed] (S0) to[bend left=14] node[above=1mm, align=center, font=\scriptsize]
+  {NONE: $a=p_{01}$} (S1);
+\draw[->, dashed] (S1) to[bend left=14] node[below=1mm, align=center, font=\scriptsize]
+  {NONE: $b=p_{10}$} (S0);
+\path (S1) edge[loop right, min distance=14mm, looseness=10, font=\scriptsize]
+  node[align=center] {MAINTAIN\\(cost $c_M$):\\forces stay-1} (S1);
+\end{tikzpicture}
+}
+\caption{The per-node 2-state/3-action MDP each round's index computation
+solves (dashed: unpaid natural transitions; solid: the two paid, forced
+actions). Section~\ref{sec:index} gives the four resulting stationary
+policies' closed-form value functions and the resulting index
+$\lambda^\star_v$.}
+\label{fig:mdp}
+\end{figure}
 
 \begin{proposition}[Closed forms]
 \label{prop:closedform}
