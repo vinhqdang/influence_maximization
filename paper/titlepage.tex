@@ -1,7 +1,5 @@
 \documentclass[11pt]{article}
 \usepackage[margin=1in]{geometry}
-\usepackage{amsmath}
-\usepackage{amssymb}
 \usepackage{authblk}
 \usepackage{hyperref}
 \hypersetup{colorlinks=true, urlcolor=blue, linkcolor=blue}
@@ -21,74 +19,24 @@ Parameter Uncertainty}
 \maketitle
 \thispagestyle{empty}
 
-\vspace{-3.5em}
+\vspace{-3em}
 
-\begin{center}
-\begin{tabular}{ll}
-\textbf{Corresponding author:} & Quang-Vinh Dang \\
-\textbf{Email:} & \href{mailto:vinh.dq4@buv.edu.vn}{vinh.dq4@buv.edu.vn} \\
-\textbf{ORCID:} & \href{https://orcid.org/0000-0002-3877-8024}{0000-0002-3877-8024} \\
-\textbf{Affiliation:} & British University Vietnam, Hung Yen, Vietnam \\
-\textbf{Target venue:} & IEEE Transactions on Knowledge and Data Engineering \\
-\end{tabular}
-\end{center}
+\noindent\textbf{Address for correspondence}
 
-\vspace{1em}
+\noindent Quang-Vinh Dang \\
+British University Vietnam, Hung Yen, Vietnam \\
+Email: \href{mailto:vinh.dq4@buv.edu.vn}{vinh.dq4@buv.edu.vn}
 
-\noindent\textbf{Abstract}
+\vspace{1.5em}
 
-\noindent The classical influence maximization guarantee of Kempe,
-Kleinberg, and Tardos rests on four assumptions: progressive diffusion, a
-monotone submodular objective, known influence parameters, and no
-fairness requirement. Real deployments routinely violate all four at
-once: influence can be actively reversed (backfire, or negative
-word-of-mouth), edge probabilities are never known exactly, and
-interventions must not neglect a disadvantaged subpopulation. We study
-this combined relaxation. A sandwich approximation built from two
-monotone-submodular surrogates yields a $\rho(1-1/e)$ guarantee for
-\emph{every} backfire intensity $\beta\in[0,1)$, tight at $\beta=0$, with
-a per-instance, directly computable certificate; $(1-1/e)$-hardness
-survives backfire exactly. A closed-form Lagrangian index for the
-resulting 2-state/3-action per-node control problem replaces a
-bisection-plus-value-iteration inner loop with an
-$O(Km+n\log n)$-per-round procedure, roughly two orders of magnitude
-faster in practice. We also identify and correct a population-weighting
-pathology in an existing isoelastic-welfare fairness objective that
-systematically under-protects small groups, replacing it with an
-egalitarian reweighting. These pieces combine into MF-BWI-Fair, a
-control policy that further adds mean-field belief propagation and
-Bayesian parameter tracking. On a synthetic benchmark, MF-BWI-Fair
-sustains spread under backfire and recovery where one-shot baselines --
-including independently reimplemented published algorithms (IMM,
-He--Kempe's robust Saturate Greedy) -- degrade sharply, and the fairness
-fix raises worst-off-group reach at negligible spread cost. The finding
-generalizes across four further synthetic graphs and three real Facebook
-ego-networks at increasing scale (224--532 nodes), with one disclosed
-exception: on the largest, most community-structured real graph, a more
-expensive rollout baseline retains a small, stable edge, examined in the
-Discussion section. We additionally validate our IMM reimplementation
-directly against the original authors' own C++ code.
+\noindent\textbf{Acknowledgements}
 
-\vspace{0.8em}
+\noindent The author has no acknowledgements to declare.
 
-\noindent\textbf{Index Terms}
+\vspace{1.5em}
 
-\noindent Influence maximization, submodular optimization, restless
-bandits, fairness, robust optimization, social networks.
+\noindent\textbf{Conflict of Interest Statement}
 
-\vspace{0.8em}
-
-\noindent\textbf{Declarations}
-
-\begin{itemize}
-\item \textbf{Funding:} No external funding was received for this work.
-\item \textbf{Conflicts of interest:} The author declares no conflicts
-  of interest.
-\item \textbf{Data availability:} The SNAP ego-Facebook dataset used for
-  real-network validation is publicly available
-  (McAuley and Leskovec, 2012).
-\item \textbf{Prior submission:} This manuscript is original, has not
-  been published previously, and is not under consideration elsewhere.
-\end{itemize}
+\noindent The author declares no conflict of interest.
 
 \end{document}
