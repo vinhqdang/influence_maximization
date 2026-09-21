@@ -217,49 +217,6 @@ finding: spontaneous, state-independent recovery alone preserves monotone
 submodularity on \emph{any} graph, via layered-DAG reachability rather than
 threshold-rule structure.
 
-\subsection{Connections to epidemic-network control}
-At $\beta=0$, this paper's recovery-capable dynamics is exactly an SIS
-(susceptible-infected-susceptible) process: an active node spontaneously
-deactivates at rate $q_v$, precisely as an infected node recovers under
-SIS. The network epidemic-control literature has studied this same
-two-state process from the opposite direction -- suppressing spread
-rather than sustaining it. Wang et al.~\cite{wang2003eigenvalue} and Van
-Mieghem, Omic, and Kooij~\cite{vanmieghem2009virus} establish the
-classical spectral epidemic threshold $\tau_c=1/\lambda_{\max}(G)$ for
-SIS on an arbitrary graph -- a static structural quantity, not a
-per-round control policy. Chen et al.~\cite{chen2016node} pursue the
-same suppression goal by removing or immunizing nodes to lower
-$\lambda_{\max}$, a one-shot structural edit rather than a recurring
-activation decision; Nowzari, Preciado, and Pappas~\cite{nowzari2016analysis}
-survey the broader control-theoretic literature built on this spectral
-view. Our problem inverts both the objective (sustain spread, not
-suppress it) and the intervention (a per-round, per-node
-activation/maintenance decision under a shared budget, not a one-time
-structural edit to the graph), while sharing the same underlying
-two-state stochastic process; the closed-form Lagrangian index of
-Section~\ref{sec:index} is, in this sense, a per-round control policy
-for the SIS-style state each node already carries, rather than a static
-spectral quantity computed once from the graph.
-
-\subsection{Learning-based / GNN influence maximization}
-A separate line of work replaces the classical submodular-greedy
-pipeline with learned models. Panagopoulos, Malliaros, and
-Vazirgiannis~\cite{panagopoulos2022multitask} learn influencer/susceptible
-node embeddings directly from observed cascades via multi-task learning
-and select seeds from the learned representation, with no explicit
-diffusion model. Ling et al.~\cite{ling2023deepim} and Chen et
-al.~\cite{chen2024touplegdd} go further, replacing the greedy
-marginal-gain loop itself with an end-to-end graph neural network -- a
-generative spread-count decoder in the former, a double deep-Q-network
-trained over coupled GNN encoders in the latter. These approaches trade
-the classical worst-case $(1-1/e)$-style guarantee for empirical
-accuracy and inference-time speed on the graph distribution they are
-trained on, and none addresses group fairness, non-progressive/recovery
-dynamics, or parameter uncertainty jointly; like
-\cite{feng2023influence} and \cite{hui2024nonprogressive} above, they
-are complementary rather than competing baselines for this paper's
-classical-algorithms, guarantee-preserving focus.
-
 \subsection{Non-monotone / non-submodular / negative-influence models}
 Bharathi et al.~\cite{bharathi2007competitive} give the first competitive
 cascade model. Chen et al.~\cite{chen2011influence} extend IC with a quality
@@ -291,7 +248,7 @@ He and Kempe~\cite{he2016robust} formalize worst-case-across-scenarios robust
 influence maximization and give a bicriteria Saturate Greedy algorithm with a
 provable budget-blowup/quality trade-off; no official code is available for
 this specific paper. The dominant paradigm for online uncertainty is
-combinatorial-bandit learning~\cite{vaswani2015influence,wen2017online,lei2015online,vaswani2017modelindependent,chen2013combinatorial,chen2016combinatorial}
+combinatorial-bandit learning~\cite{vaswani2015influence,wen2017online,chen2013combinatorial}
 or one-shot distributionally robust
 optimization~\cite{chen2020correlation,staib2019distributionally}. A
 genuinely single-shot Bayesian formulation -- integrating expected spread
@@ -1153,41 +1110,14 @@ Section~\ref{sec:limitations}. The qualitative pattern documented on
 MF-BWI-Fair lead as either increases -- holds against every one-shot
 baseline at all three real-graph scales post-fix.
 
-\textbf{A cross-graph summary.} Figure~\ref{fig:cross-graph} condenses
-every graph discussed above (and \texttt{large\_community\_sbm} from
-Section~\ref{sec:limitations}) into one view: for each graph, MF-BWI-Fair's
-mean spread advantage over the best one-shot baseline and over
-repeated-greedy, averaged across that graph's own $\beta$ sweep (including
-the $\beta=0$ point where Lemma~\ref{lem:recovery-submodular} guarantees a
-tie with repeated-greedy, so this average necessarily understates the
-lead reported at high $\beta$ elsewhere in this section -- it is a
-conservative, non-cherry-picked single number per graph, not a
-replacement for the sweep curves). The one-shot advantage shrinks
-markedly with graph size and density (from $+70\%$ on the 60-node
-\texttt{small\_sbm} to at most $+9.6\%$, and a statistical tie, on the
-three real graphs), while the repeated-greedy comparison stays within a
-few percent of parity everywhere except the two most
+Across all eight graphs tested (synthetic and real), the one-shot
+advantage shrinks markedly with graph size and density (from $+70\%$ on
+the 60-node \texttt{small\_sbm} to at most $+9.6\%$, and a statistical
+tie, on the three real graphs), while the repeated-greedy comparison
+stays within a few percent of parity everywhere except the two most
 disparately-structured graphs (\texttt{real\_facebook\_3437} and
-\texttt{large\_community\_sbm}), where it is MF-BWI-Fair that trails
-slightly -- visually summarizing the same scale/structure-dependent
-picture developed above and in Section~\ref{sec:limitations}. The two
-disparately-structured graphs' bars ($-2.5\%$ and $-1.6\%$) look similar
-here because this figure only averages the $\beta$ sweep; pooling both
-sweeps with a confidence interval, as Section~\ref{sec:limitations}
-does, puts \texttt{large\_community\_sbm}'s gap smaller still
-($-1.05\%$, 95\% CI crossing $-0.36\%$) and not statistically
-distinguishable from zero at most operating points, unlike
-\texttt{real\_facebook\_3437}'s more consistent gap.
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{figures/cross_graph_summary.png}
-\caption{MF-BWI-Fair's mean spread advantage (\%) over the best one-shot
-baseline and over repeated-greedy, averaged across each graph's own
-$\beta$ sweep, for all eight graphs tested (synthetic and real, ordered
-by node count).}
-\label{fig:cross-graph}
-\end{figure}
+\texttt{large\_community\_sbm} from Section~\ref{sec:limitations}), where
+it is MF-BWI-Fair that trails slightly.
 
 \begin{table}[t]
 \centering
@@ -1310,15 +1240,13 @@ remain future work.
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{figures/large_community_sbm_beta.png}
-\\[4pt]
-\includegraphics[width=\columnwidth]{figures/large_community_sbm_q.png}
 \caption{\texttt{large\_community\_sbm} (1,065 nodes, six community
 sizes scaled from \texttt{real\_facebook\_3437}): time-averaged spread
-vs.\ backfire intensity $\beta$ at $q=0.05$ (top) and vs.\ recovery rate
-$q$ at $\beta=0.15$ (bottom), mean $\pm$ 95\% CI shading, 6 trials per
-point. MF-BWI-Fair (teal) leads every one-shot baseline throughout and
-tracks repeated-greedy (yellow) closely, unlike the stable, one-sided
-gap seen on \texttt{real\_facebook\_3437} itself.}
+vs.\ backfire intensity $\beta$ at $q=0.05$, mean $\pm$ 95\% CI shading,
+6 trials per point (the $q$ sweep, omitted for space, shows the same
+pattern). MF-BWI-Fair (teal) leads every one-shot baseline throughout
+and tracks repeated-greedy (yellow) closely, unlike the stable,
+one-sided gap seen on \texttt{real\_facebook\_3437} itself.}
 \label{fig:large-community-sweeps}
 \end{figure}
 
