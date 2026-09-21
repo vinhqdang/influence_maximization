@@ -1,0 +1,66 @@
+\documentclass[11pt]{letter}
+\usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, urlcolor=blue}
+
+\signature{Quang-Vinh Dang}
+\address{Quang-Vinh Dang \\ British University Vietnam \\ Hung Yen, Vietnam \\ vinh.dq4@buv.edu.vn}
+
+\begin{document}
+
+\begin{letter}{Editor-in-Chief\\IEEE Transactions on Knowledge and Data Engineering}
+
+\opening{Dear Editor,}
+
+I am pleased to submit the manuscript, ``Fair, Non-Progressive Influence
+Control Under Backfire and Parameter Uncertainty,'' for consideration for
+publication in IEEE Transactions on Knowledge and Data Engineering.
+
+This paper studies influence maximization under a combined relaxation of
+the four assumptions underlying the classical Kempe--Kleinberg--Tardos
+guarantee: progressive diffusion, monotone submodularity, known influence
+parameters, and the absence of a fairness requirement. Real deployments
+routinely violate all four at once -- influence can be actively reversed
+through negative word-of-mouth, edge probabilities are estimated rather
+than known, and social interventions must not neglect a disadvantaged
+subpopulation. We make the following contributions:
+
+\begin{itemize}
+\item A sandwich approximation built from two monotone-submodular
+  surrogates, giving a $\rho(1-1/e)$ guarantee for every backfire
+  intensity $\beta \in [0,1)$, with a directly computable per-instance
+  certificate, and a proof that $(1-1/e)$-hardness survives backfire
+  exactly.
+\item A closed-form Lagrangian index for the resulting 2-state/3-action
+  per-node control problem, replacing a bisection-plus-value-iteration
+  inner loop with an $O(Km + n\log n)$-per-round procedure -- roughly
+  two orders of magnitude faster in our measurements.
+\item Identification and correction of a population-weighting pathology
+  in an existing isoelastic-welfare fairness objective that
+  systematically under-protects small groups.
+\item MF-BWI-Fair, a control policy combining these results with
+  mean-field belief propagation and Bayesian parameter tracking,
+  validated against independently reimplemented published baselines
+  (including a direct benchmark of our IMM reimplementation against the
+  original authors' own C++ code) on a primary synthetic benchmark, four
+  further synthetic graphs, and three real Facebook ego-networks at
+  increasing scale.
+\end{itemize}
+
+We believe this work is well suited to the scope of IEEE Transactions on
+Knowledge and Data Engineering: it connects submodular/RIS-style
+influence-maximization theory to restless-bandit sequential control
+theory -- a connection we believe is novel for a node-level
+activation/maintenance control problem -- while remaining grounded in
+classical, guarantee-preserving algorithmic techniques and a thorough,
+honestly reported empirical evaluation.
+
+This manuscript is original, has not been published previously, and is
+not currently under consideration for publication elsewhere. I have no
+conflicts of interest to declare. Thank you for considering our
+submission; I look forward to the reviewers' feedback.
+
+\closing{Sincerely,}
+
+\end{letter}
+\end{document}
