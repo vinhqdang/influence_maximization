@@ -33,49 +33,36 @@ vinh.dq4@buv.edu.vn). ORCID: 0000-0002-3877-8024.}}
 \maketitle
 
 \begin{abstract}
-The classical influence maximization guarantee of Kempe, Kleinberg, and Tardos
-rests on four assumptions: progressive diffusion, a monotone submodular
-objective, known influence parameters, and no fairness requirement. Real
-deployments routinely violate all four at once: influence decays and can be
-actively reversed (backfire, or negative word-of-mouth), edge probabilities
-are never known exactly, and social interventions must not neglect a
-disadvantaged subpopulation. This paper studies the combined relaxation. We
-prove that a sandwich approximation built from two monotone-submodular
-surrogates yields a $\rho(1-1/e)$ guarantee for \emph{every} backfire
-intensity $\beta \in [0,1)$, degenerating gracefully to the tight $1-1/e$
-bound at $\beta=0$ and admitting a per-instance, directly computable
-certificate. We derive a closed-form Lagrangian index for the resulting
-2-state/3-action per-node control problem, replacing a bisection-plus-value-iteration
-inner loop with an $O(Km+n\log n)$-per-round procedure that we measure to be
-roughly two orders of magnitude faster than the bisection oracle it replaces.
-We show that $(1-1/e)$-hardness survives backfire exactly. Finally, we
-identify and correct a population-weighting
+The classical influence maximization guarantee of Kempe, Kleinberg, and
+Tardos rests on four assumptions: progressive diffusion, a monotone
+submodular objective, known influence parameters, and no fairness
+requirement. Real deployments routinely violate all four at once: influence
+can be actively reversed (backfire, or negative word-of-mouth), edge
+probabilities are never known exactly, and interventions must not neglect a
+disadvantaged subpopulation. We study this combined relaxation. A sandwich
+approximation built from two monotone-submodular surrogates yields a
+$\rho(1-1/e)$ guarantee for \emph{every} backfire intensity
+$\beta\in[0,1)$, tight at $\beta=0$, with a per-instance, directly
+computable certificate; $(1-1/e)$-hardness survives backfire exactly. A
+closed-form Lagrangian index for the resulting 2-state/3-action per-node
+control problem replaces a bisection-plus-value-iteration inner loop with
+an $O(Km+n\log n)$-per-round procedure, roughly two orders of magnitude
+faster in practice. We also identify and correct a population-weighting
 pathology in an existing isoelastic-welfare fairness objective that
-systematically under-protects small groups, and replace it with an
-egalitarian reweighting. We implement all of this in a control policy,
-MF-BWI-Fair, that combines mean-field belief propagation, Bayesian parameter
-tracking, the closed-form index, and the corrected fairness reweighting.
-Experiments on a 120-node synthetic stochastic block model show
-MF-BWI-Fair sustaining spread under backfire and recovery where one-shot
-baselines -- including independently reimplemented published algorithms
-(IMM, He--Kempe's robust Saturate Greedy) -- degrade sharply, reaching over
-$6\times$ the best one-shot baseline's spread at the most severe recovery
-rate tested, and show the egalitarian fix raising worst-off-group reach at
-negligible spread cost. We validate generalization on three further
-synthetic graphs (two scales, a structurally different scale-free
-topology) and three real social networks at increasing scale (224,
-168, and 532-node Facebook ego-networks). The synthetic-graph finding
-reproduces cleanly. On the real networks, we first observe a divergence
-from this pattern, and we trace it to two causes: an insufficient compute
-budget, and a harness bug that gave one-shot baselines an unearned
-one-round propagation head start over MF-BWI-Fair and a repeated-greedy
-baseline. Fixing both restores MF-BWI-Fair's lead over every one-shot
-classical baseline at all three real-graph scales, with one exception: on
-the largest real graph, MF-BWI-Fair trails the more expensive
-repeated-greedy rollout baseline by a small, stable margin, examined in
-the Discussion section. We additionally benchmark our IMM
-reimplementation against the original authors' own C++ code and find it
-trustworthy (within 0.6\% expected spread).
+systematically under-protects small groups, replacing it with an
+egalitarian reweighting. These pieces combine into MF-BWI-Fair, a control
+policy that further adds mean-field belief propagation and Bayesian
+parameter tracking. On a synthetic benchmark, MF-BWI-Fair sustains spread
+under backfire and recovery where one-shot baselines -- including
+independently reimplemented published algorithms (IMM, He--Kempe's robust
+Saturate Greedy) -- degrade sharply, and the fairness fix raises
+worst-off-group reach at negligible spread cost. The finding generalizes
+across four further synthetic graphs and three real Facebook ego-networks
+at increasing scale (224--532 nodes), with one disclosed exception: on the
+largest, most community-structured real graph, a more expensive rollout
+baseline retains a small, stable edge, examined in the Discussion section.
+We additionally validate our IMM reimplementation directly against the
+original authors' own C++ code.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -768,7 +755,7 @@ Figure~\ref{fig:pipeline}. Each round:
 \draw[->] (fair) -- (index);
 \draw[->] (index) -- (fill);
 \draw[->] (fill) -- (env);
-\draw[->] (env.south) |- ++(0,-0.5) -| (bayes.south) node[midway, below, yshift=-0.5cm] {next round};
+\draw[->] (env.north) -- (bayes.south) node[midway, left, align=center] {next\\round};
 \end{tikzpicture}
 }
 \caption{MF-BWI-Fair's per-round control loop (numbered as in the list
